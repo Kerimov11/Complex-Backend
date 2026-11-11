@@ -54,15 +54,30 @@ public class VerificationServiceImpl implements VerificationService {
             return invalid(code, "Kod boşdur.");
         }
 
-        List<Reservation> reservations = reservationRepository
-                .findByVoucherCodeIgnoreCaseForUpdate(normalized);
+        List<Reservation> reservations = findReservations(code);
         if (!reservations.isEmpty()) {
-            VerificationResultDto check = validateReservations(reservations, normalized);
-            if (!check.isValid()) {
-                return check;
-            }
             LocalDateTime now = LocalDateTime.now();
+
+            if (reservations.stream().anyMatch(r -> r.getCheckedInAt() != null)) {
+                Reservation checked = reservations.stream()
+                        .filter(r -> r.getCheckedInAt() != null)
+                        .findFirst()
+                        .orElse(reservations.get(0));
+                String checkTime = checked.getCheckedInAt() != null
+                        ? checked.getCheckedInAt().toLocalTime().toString().substring(0, 5) : "";
+                return reservationBuilder(reservations, normalized)
+                        .valid(false)
+                        .status("ALREADY_USED")
+                        .message("Bu QR bilet artıq istifadə olunub (" + checkTime + ").")
+                        .checkedInAt(checked.getCheckedInAt())
+                        .checkedInBy(checked.getCheckedInBy())
+                        .build();
+            }
+
+            // Hər hansı xüsusi paneldə (könüllü, turniket, kassa və s.) ilk skanda
+            // bilet avtomatik təsdiqlənir (CONFIRMED) və buza giriş (CHECKED_IN) qeydə alınır!
             for (Reservation reservation : reservations) {
+                reservation.setStatus(Reservation.Status.CONFIRMED);
                 if (reservation.getCashierVerifiedAt() == null) {
                     reservation.setCashierVerifiedAt(now);
                     reservation.setCashierVerifiedBy(username);
@@ -71,10 +86,11 @@ public class VerificationServiceImpl implements VerificationService {
                 reservation.setCheckedInBy(username);
                 reservationRepository.save(reservation);
             }
+
             return reservationBuilder(reservations, normalized)
                     .valid(true)
                     .status("CHECKED_IN")
-                    .message("Bilet uğurla təsdiqləndi. Bu QR kod artıq təkrar skan edilə bilməz.")
+                    .message("Bilet uğurla təsdiqləndi! Müştərini buza buraxın.")
                     .checkedInAt(now)
                     .checkedInBy(username)
                     .build();
@@ -101,15 +117,24 @@ public class VerificationServiceImpl implements VerificationService {
         if (normalized == null) {
             return invalid(code, "Kod boşdur.");
         }
-        List<Reservation> reservations = reservationRepository
-                .findByVoucherCodeIgnoreCaseForUpdate(normalized);
+        List<Reservation> reservations = findReservations(code);
         if (!reservations.isEmpty()) {
-            VerificationResultDto check = validateReservations(reservations, normalized);
-            if (!check.isValid()) {
-                return check;
-            }
             LocalDateTime now = LocalDateTime.now();
+            if (reservations.stream().anyMatch(r -> r.getCheckedInAt() != null)) {
+                Reservation checked = reservations.stream()
+                        .filter(r -> r.getCheckedInAt() != null)
+                        .findFirst()
+                        .orElse(reservations.get(0));
+                return reservationBuilder(reservations, normalized)
+                        .valid(false)
+                        .status("ALREADY_USED")
+                        .message("Bu QR bilet artıq istifadə olunub.")
+                        .checkedInAt(checked.getCheckedInAt())
+                        .checkedInBy(checked.getCheckedInBy())
+                        .build();
+            }
             for (Reservation reservation : reservations) {
+                reservation.setStatus(Reservation.Status.CONFIRMED);
                 if (reservation.getCashierVerifiedAt() == null) {
                     reservation.setCashierVerifiedAt(now);
                     reservation.setCashierVerifiedBy(username);
@@ -139,6 +164,49 @@ public class VerificationServiceImpl implements VerificationService {
         return invalid(code, "Bu koda uyğun bilet tapılmadı.");
     }
 
+    private List<Reservation> findReservations(String code) {
+        if (code == null || code.isBlank()) {
+            return List.of();
+        }
+        String clean = code.trim();
+
+        // 1. Dəqiq voucherCode ilə axtarış (böyük-kiçik hərf fərq etmədən)
+        List<Reservation> list = reservationRepository.findByVoucherCodeIgnoreCase(clean);
+        if (!list.isEmpty()) {
+            return list;
+        }
+
+        // 2. Əgər QR kod daxilində URL və ya prefiks varsa (məs. SAV-XXX-XXXX formatı)
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(SAV-[A-Z0-9]+-[A-Z0-9]+)", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(clean);
+        if (m.find()) {
+            list = reservationRepository.findByVoucherCodeIgnoreCase(m.group(1));
+            if (!list.isEmpty()) {
+                return list;
+            }
+        }
+
+        // 3. RES-123 və ya birbaşa ID ilə axtarış
+        String upper = clean.toUpperCase(Locale.ROOT);
+        if (upper.startsWith("RES-")) {
+            try {
+                Long id = Long.parseLong(upper.substring(4).trim());
+                Optional<Reservation> r = reservationRepository.findById(id);
+                if (r.isPresent()) {
+                    return List.of(r.get());
+                }
+            } catch (NumberFormatException ignored) {}
+        }
+        try {
+            Long id = Long.parseLong(clean);
+            Optional<Reservation> r = reservationRepository.findById(id);
+            if (r.isPresent()) {
+                return List.of(r.get());
+            }
+        } catch (NumberFormatException ignored) {}
+
+        return List.of();
+    }
+
     /**
      * Turniket skanından sonra konkini müştəriyə təhvil verir.
      * Stok yalnız bu düymə basılanda, hələ çıxılmayıbsa, çıxılır.
@@ -154,8 +222,7 @@ public class VerificationServiceImpl implements VerificationService {
 
         reservationActivationService.expireStaleReservations();
 
-        List<Reservation> reservations = reservationRepository
-                .findByVoucherCodeIgnoreCaseForUpdate(normalized);
+        List<Reservation> reservations = findReservations(code);
         if (reservations.isEmpty()) {
             return invalid(code, "Bu koda uyğun onlayn bilet tapılmadı.");
         }

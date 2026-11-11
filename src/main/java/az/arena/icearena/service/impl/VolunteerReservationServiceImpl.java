@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
@@ -36,15 +37,17 @@ public class VolunteerReservationServiceImpl implements VolunteerReservationServ
     @Transactional
     public List<VolunteerReservationDto> listActiveReservations() {
         reservationActivationService.expireStaleReservations();
-        LocalDate today = LocalDate.now();
-        LocalTime now = LocalTime.now();
-        return reservationRepository
-                .findByStatusInAndSessionSessionDateGreaterThanEqualOrderBySessionSessionDateAscSessionStartTimeAscIdAsc(
-                        VISIBLE_STATUSES, today)
-                .stream()
-                .filter(reservation -> isActiveOrUpcoming(reservation, today, now))
+        return reservationRepository.findAll().stream()
+                .filter(this::isVisibleForVolunteer)
+                .sorted(Comparator.comparing(Reservation::getId).reversed())
                 .map(this::toDto)
                 .toList();
+    }
+
+    private boolean isVisibleForVolunteer(Reservation reservation) {
+        return reservation != null
+                && reservation.getStatus() != Reservation.Status.CANCELLED
+                && reservation.getSkateHandedOutAt() == null;
     }
 
     @Override
