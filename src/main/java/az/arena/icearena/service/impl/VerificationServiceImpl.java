@@ -68,14 +68,12 @@ public class VerificationServiceImpl implements VerificationService {
                 return reservationBuilder(reservations, normalized)
                         .valid(false)
                         .status("ALREADY_USED")
-                        .message("Bu QR bilet artıq istifadə olunub (" + checkTime + ").")
+                        .message("Bu QR bilet artıq turniketdə istifadə olunub (" + checkTime + "). Təkrar turniketdə skan edilə bilməz.")
                         .checkedInAt(checked.getCheckedInAt())
                         .checkedInBy(checked.getCheckedInBy())
                         .build();
             }
 
-            // Hər hansı xüsusi paneldə (könüllü, turniket, kassa və s.) ilk skanda
-            // bilet avtomatik təsdiqlənir (CONFIRMED) və buza giriş (CHECKED_IN) qeydə alınır!
             for (Reservation reservation : reservations) {
                 reservation.setStatus(Reservation.Status.CONFIRMED);
                 if (reservation.getCashierVerifiedAt() == null) {
@@ -90,7 +88,7 @@ public class VerificationServiceImpl implements VerificationService {
             return reservationBuilder(reservations, normalized)
                     .valid(true)
                     .status("CHECKED_IN")
-                    .message("Bilet uğurla təsdiqləndi! Müştərini buza buraxın.")
+                    .message("Bilet turniketdə uğurla təsdiqləndi! Müştərini buza buraxın.")
                     .checkedInAt(now)
                     .checkedInBy(username)
                     .build();
@@ -120,45 +118,86 @@ public class VerificationServiceImpl implements VerificationService {
         List<Reservation> reservations = findReservations(code);
         if (!reservations.isEmpty()) {
             LocalDateTime now = LocalDateTime.now();
+
+            // 1. Artıq turniketdə istifadə olunubsa
             if (reservations.stream().anyMatch(r -> r.getCheckedInAt() != null)) {
                 Reservation checked = reservations.stream()
                         .filter(r -> r.getCheckedInAt() != null)
                         .findFirst()
                         .orElse(reservations.get(0));
+                String checkTime = checked.getCheckedInAt() != null
+                        ? checked.getCheckedInAt().toLocalTime().toString().substring(0, 5) : "";
                 return reservationBuilder(reservations, normalized)
                         .valid(false)
                         .status("ALREADY_USED")
-                        .message("Bu QR bilet artıq istifadə olunub.")
+                        .message("Bu QR bilet artıq turniketdən keçib / istifadə olunub (" + checkTime + ").")
                         .checkedInAt(checked.getCheckedInAt())
                         .checkedInBy(checked.getCheckedInBy())
                         .build();
             }
+
+            // 2. Artıq kassada təsdiqlənibsə (kassada yalnız 1 dəfə skan oluna bilər!)
+            if (reservations.stream().anyMatch(r -> r.getCashierVerifiedAt() != null)) {
+                Reservation verified = reservations.stream()
+                        .filter(r -> r.getCashierVerifiedAt() != null)
+                        .findFirst()
+                        .orElse(reservations.get(0));
+                String verifiedTime = verified.getCashierVerifiedAt() != null
+                        ? verified.getCashierVerifiedAt().toLocalTime().toString().substring(0, 5) : "";
+                return reservationBuilder(reservations, normalized)
+                        .valid(false)
+                        .status("ALREADY_CASHIER_VERIFIED")
+                        .message("Bu bilet artıq kassada təsdiqlənib (" + verifiedTime + "). Təkrar kassada skan edilə bilməz.")
+                        .build();
+            }
+
+            // 3. İlk dəfə kassada skan edilir: təsdiqlə və Aktiv biletlər siyahısına sal!
             for (Reservation reservation : reservations) {
                 reservation.setStatus(Reservation.Status.CONFIRMED);
-                if (reservation.getCashierVerifiedAt() == null) {
-                    reservation.setCashierVerifiedAt(now);
-                    reservation.setCashierVerifiedBy(username);
-                    reservationRepository.save(reservation);
-                }
+                reservation.setCashierVerifiedAt(now);
+                reservation.setCashierVerifiedBy(username);
+                reservationRepository.save(reservation);
             }
             return reservationBuilder(reservations, normalized)
                     .valid(true)
                     .status("VALID")
                     .message("Bilet kassada təsdiqləndi və Aktiv bilet siyahısına əlavə olundu.")
+                    .cashierVerifiedAt(now)
+                    .cashierVerifiedBy(username)
                     .build();
         }
+
         Optional<Ticket> ticket = findTicket(normalized, true);
         if (ticket.isPresent()) {
             Ticket found = ticket.get();
             VerificationResultDto check = lookupTicket(found, normalized);
-            if (check.isValid() && found.getCashierVerifiedAt() == null) {
-                LocalDateTime now = LocalDateTime.now();
-                found.setCashierVerifiedAt(now);
-                found.setCashierVerifiedBy(username);
-                ticketRepository.save(found);
-                check.setCashierVerifiedAt(now);
-                check.setCashierVerifiedBy(username);
+
+            // 1. Turniketdə istifadə olunubsa
+            if (Boolean.TRUE.equals(found.getIsUsed()) || found.getCheckedInAt() != null) {
+                check.setValid(false);
+                check.setStatus("ALREADY_USED");
+                check.setMessage("Bu QR bilet artıq turniketdən keçib / istifadə olunub.");
+                return check;
             }
+
+            // 2. Kassada artıq təsdiqlənibsə
+            if (found.getCashierVerifiedAt() != null) {
+                check.setValid(false);
+                check.setStatus("ALREADY_CASHIER_VERIFIED");
+                check.setMessage("Bu bilet artıq kassada təsdiqlənib. Təkrar kassada skan edilə bilməz.");
+                return check;
+            }
+
+            // 3. İlk dəfə kassada təsdiqlənir
+            LocalDateTime now = LocalDateTime.now();
+            found.setCashierVerifiedAt(now);
+            found.setCashierVerifiedBy(username);
+            ticketRepository.save(found);
+            check.setValid(true);
+            check.setStatus("VALID");
+            check.setMessage("Bilet kassada təsdiqləndi və Aktiv bilet siyahısına əlavə olundu.");
+            check.setCashierVerifiedAt(now);
+            check.setCashierVerifiedBy(username);
             return check;
         }
         return invalid(code, "Bu koda uyğun bilet tapılmadı.");
@@ -533,7 +572,12 @@ public class VerificationServiceImpl implements VerificationService {
 
     private VerificationResultDto verifyTicket(Ticket ticket, String code, String username) {
         VerificationResultDto check = lookupTicket(ticket, code);
-        if (!check.isValid()) {
+        if (Boolean.TRUE.equals(ticket.getIsUsed()) || ticket.getCheckedInAt() != null) {
+            String checkTime = ticket.getCheckedInAt() != null
+                    ? ticket.getCheckedInAt().toLocalTime().toString().substring(0, 5) : "";
+            check.setValid(false);
+            check.setStatus("ALREADY_USED");
+            check.setMessage("Bu QR bilet artıq turniketdə istifadə olunub (" + checkTime + "). Təkrar turniketdə skan edilə bilməz.");
             return check;
         }
         LocalDateTime now = LocalDateTime.now();
@@ -551,7 +595,7 @@ public class VerificationServiceImpl implements VerificationService {
         boolean active = isOnIce(ticket.getSession(), now, endsAt);
         check.setStatus("CHECKED_IN");
         check.setValid(true);
-        check.setMessage("Konki/bilet kodu uğurla təsdiqləndi. Bu kod təkrar istifadə edilə bilməz.");
+        check.setMessage("Bilet turniketdə uğurla təsdiqləndi! Müştərini buza buraxın.");
         check.setCashierVerifiedAt(ticket.getCashierVerifiedAt());
         check.setCashierVerifiedBy(ticket.getCashierVerifiedBy());
         check.setCheckedInAt(now);
