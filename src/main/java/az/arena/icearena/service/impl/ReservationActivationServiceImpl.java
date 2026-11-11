@@ -98,11 +98,6 @@ public class ReservationActivationServiceImpl implements ReservationActivationSe
             if (reservation.getSkateHandedOutAt() != null) {
                 throw new BadRequestException("Konki artıq müştəriyə təhvil verilib.");
             }
-            Session session = reservation.getSession();
-            if (session != null && session.getSessionDate() != null && session.getEndTime() != null
-                    && LocalDateTime.of(session.getSessionDate(), session.getEndTime()).isBefore(now)) {
-                throw new BadRequestException("Sessiya bitdiyi üçün konki rezervasiyası aktivləşdirilə bilməz.");
-            }
             if (reservation.getTimerExpiresAt() != null
                     && reservation.getTimerExpiresAt().isAfter(now)) {
                 throw new BadRequestException("Konki rezervasiyası artıq aktivdir.");

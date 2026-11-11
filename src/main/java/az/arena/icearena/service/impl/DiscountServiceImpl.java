@@ -301,8 +301,8 @@ public class DiscountServiceImpl implements DiscountService {
         if (request.getDurationMinutes() != HALF && request.getDurationMinutes() != HOUR) {
             throw new BadRequestException("Bilet müddəti yalnız 30 və ya 60 dəqiqə ola bilər.");
         }
-        if (request.getQuantity() < 1 || request.getQuantity() > 50) {
-            throw new BadRequestException("İştirakçı sayı 1–50 aralığında olmalıdır.");
+        if (request.getQuantity() < 1 || request.getQuantity() > 1000) {
+            throw new BadRequestException("İştirakçı sayı 1–1000 aralığında olmalıdır.");
         }
     }
 

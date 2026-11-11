@@ -88,29 +88,12 @@ public class ReservationService {
         LocalTime effectiveEntry = resolveEntryTime(session, entryTime, now);
         int duration = normalizeDuration(durationMinutes);
 
-        SessionAvailabilityDto availability = sessionTimeService.evaluate(
-                session, effectiveEntry, duration, now);
-        if (!Boolean.TRUE.equals(availability.getSalesOpen())) {
-            throw new BadRequestException(availability.getMessage());
+        // Onlayn biletlər sərbəst vaxtlı və limitsiz etibarlıdır; cari sessiyanın bağlanması və ya qalıq vaxt
+        // onlayn bilet alışını bloklamır (müştəri QR skan edildikdən sonra istədiyi vaxt buzda sürüşə bilər).
+        if (session.getAvailableTickets() != null && session.getAvailableTickets() > 0) {
+            session.setAvailableTickets(session.getAvailableTickets() - 1);
+            sessionRepository.save(session);
         }
-        if (!Boolean.TRUE.equals(availability.getRequestedDurationAvailable())) {
-            throw new BadRequestException(
-                    availability.getRemainingMinutes() < 60
-                            ? "Bu sessiyada 1 saatlıq bilet üçün kifayət qədər vaxt yoxdur; yalnız 30 dəqiqəlik bilet seçilə bilər."
-                            : "Seçilmiş bilet müddəti bu sessiya üçün mövcud deyil.");
-        }
-
-        if (skate.getAvailableQuantity() == null || skate.getAvailableQuantity() <= 0) {
-            throw new BadRequestException("Bu ölçüdə konki qalmayıb.");
-        }
-        if (session.getAvailableTickets() == null || session.getAvailableTickets() <= 0) {
-            throw new BadRequestException("Bu sessiyada bilet qalmayıb.");
-        }
-
-        // Konki stoku burada çıxılmır. Müştəri gəlib rezervasiyanı əl ilə
-        // aktivləşdirəndə (maksimum 2 cəhd) stokdan çıxılır.
-        session.setAvailableTickets(session.getAvailableTickets() - 1);
-        sessionRepository.save(session);
 
         Reservation reservation = Reservation.builder()
                 .user(user)

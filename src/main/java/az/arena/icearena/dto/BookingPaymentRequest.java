@@ -26,7 +26,7 @@ public class BookingPaymentRequest {
     private String reference;
 
     /** Frontend-in yaratdığı rezervasiyalar. Ödəniş uğursuz olarsa backend onları ləğv edir. */
-    @Size(max = 50, message = "Ən çoxu 50 rezervasiya ola bilər")
+    @Size(max = 1000, message = "Ən çoxu 1000 rezervasiya ola bilər")
     private List<Long> reservationIds;
 
     /** Qiymətin serverdə yenidən yoxlanması üçün əlavə məlumat. */

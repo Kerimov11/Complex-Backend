@@ -36,7 +36,7 @@ public class DiscountRequest {
 
     @NotNull(message = "İştirakçı sayı tələb olunur")
     @Min(value = 1, message = "Ən azı 1 iştirakçı olmalıdır")
-    @Max(value = 50, message = "Ən çoxu 50 iştirakçı ola bilər")
+    @Max(value = 1000, message = "Ən çoxu 1000 iştirakçı ola bilər")
     private Integer quantity;
 
     /** Sosial güzəşt hüququ: tələbə. */

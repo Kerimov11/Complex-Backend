@@ -341,13 +341,7 @@ public class VerificationServiceImpl implements VerificationService {
                     .checkedInBy(checked.getCheckedInBy())
                     .build();
         }
-        LocalDateTime sessionEnd = sessionEnd(session);
-        if (session != null && session.getSessionDate() != null
-                && (session.getSessionDate().isBefore(LocalDate.now())
-                || (sessionEnd != null && !sessionEnd.isAfter(LocalDateTime.now())))) {
-            return builder.valid(false).status("EXPIRED")
-                    .message("Bu sessiyanın vaxtı keçib; bilet etibarsızdır.").build();
-        }
+        // Bilet skan edilənədək limitsiz etibarlıdır (müddət bitmir)
         boolean hasPending = reservations.stream()
                 .anyMatch(r -> r.getStatus() == Reservation.Status.PENDING);
         if (hasPending) {
@@ -567,11 +561,6 @@ public class VerificationServiceImpl implements VerificationService {
             return builder.valid(false).status("ALREADY_USED")
                     .message("Bu QR bilet istifadə olunub.")
                     .build();
-        }
-        LocalDateTime sessionEnd = sessionEnd(session);
-        if (sessionEnd != null && !sessionEnd.isAfter(LocalDateTime.now())) {
-            return builder.valid(false).status("EXPIRED")
-                    .message("Bu biletin sessiya vaxtı bitib.").build();
         }
         return builder.valid(true).status("VALID")
                 .message("Bilet etibarlıdır; hələ təsdiqlənməyib.").build();

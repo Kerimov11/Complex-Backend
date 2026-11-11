@@ -62,8 +62,9 @@ public class TicketServiceImpl implements TicketService {
 
         customerVerificationService.requireTicketPurchaseEligibility(user);
 
-        if (session.getAvailableTickets() < request.getQuantity()) {
-            throw new BadRequestException("Not enough tickets available. Available: " + session.getAvailableTickets());
+        if (session.getAvailableTickets() != null) {
+            session.setAvailableTickets(Math.max(0, session.getAvailableTickets() - request.getQuantity()));
+            sessionRepository.save(session);
         }
 
         BigDecimal price = request.getTicketType() == TicketType.BIG ? BIG_TICKET_PRICE : CHILD_TICKET_PRICE;
@@ -94,9 +95,6 @@ public class TicketServiceImpl implements TicketService {
             paymentService.createPaymentForTicket(savedTicket.getId(), price);
             ticketDtos.add(ticketMapper.toDto(savedTicket));
         }
-
-        session.setAvailableTickets(session.getAvailableTickets() - request.getQuantity());
-        sessionRepository.save(session);
 
         return ticketDtos;
     }
@@ -223,9 +221,6 @@ public class TicketServiceImpl implements TicketService {
         } else if (allCheckedIn) {
             status = "USED";
             statusLabel = "İstifadə edilib";
-        } else if (past) {
-            status = "EXPIRED";
-            statusLabel = "Vaxtı bitib";
         } else if (activeTimer) {
             status = "ACTIVE";
             statusLabel = "Konki rezervasiyası aktivdir";
@@ -235,7 +230,6 @@ public class TicketServiceImpl implements TicketService {
         }
 
         boolean canActivate = allConfirmed
-                && !past
                 && !anyCheckedIn
                 && !anyHandedOut
                 && !activeTimer

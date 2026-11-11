@@ -21,7 +21,8 @@ public class TicketMapper {
                 && session.getEndTime() != null
                 && LocalDateTime.of(session.getSessionDate(), session.getEndTime())
                 .isBefore(LocalDateTime.now());
-        String status = used ? "USED" : past ? "EXPIRED" : "ACTIVE";
+        // Bilet istifadə edilməyənədək (QR skan edilənədək) qeyri-məhdud müddətə aktivdir
+        String status = used ? "USED" : "ACTIVE";
         return TicketDto.builder()
                 .id(ticket.getId())
                 .ticketCode(ticket.getTicketCode())
