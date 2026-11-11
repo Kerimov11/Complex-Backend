@@ -113,32 +113,15 @@ public class VolunteerShiftServiceImpl implements VolunteerShiftService {
 
         LocalDateTime now = LocalDateTime.now();
         if (shiftSlotId != null && !shiftSlotId.equals(shift.getShiftSlot().getId())) {
-            ShiftSlot currentSlot = shift.getShiftSlot();
-
-            // Günün ən son smenini seçən könüllünü başqa smenə keçirmək mümkün deyil
-            boolean isLastSlotOfDay = shiftSlotRepository
-                    .findByShiftDateAndActiveTrueOrderByStartTimeAsc(currentSlot.getShiftDate())
-                    .stream()
-                    .max(Comparator.comparing(ShiftSlot::getStartTime))
-                    .map(last -> last.getId().equals(currentSlot.getId()))
-                    .orElse(false);
-            if (isLastSlotOfDay) {
-                throw new BadRequestException("Günün ən son smenini seçən könüllünü başqa smenə keçirmək mümkün deyil.");
-            }
-
             ShiftSlot newSlot = shiftSlotRepository.findByIdAndActiveTrue(shiftSlotId)
                     .orElseThrow(() -> new ResourceNotFoundException(
                             "Aktiv smen slotu tapılmadı: " + shiftSlotId));
+
+            // Tarix keçmişsə və ya bu gündürsə və artıq başlayıbsa keçid qadağandır
             if (newSlot.getShiftDate().isBefore(LocalDate.now())
                     || (newSlot.getShiftDate().equals(LocalDate.now())
-                    && newSlot.getEndTime().isBefore(now.toLocalTime()))) {
-                throw new BadRequestException("Keçmiş smenə keçid etmək mümkün deyil.");
-            }
-
-            // Saat olaraq əvvəlki smenlərə keçid qadağandır (yalnız sonrakı smenə keçirmək olar)
-            if (newSlot.getShiftDate().equals(currentSlot.getShiftDate())
-                    && !newSlot.getStartTime().isAfter(currentSlot.getStartTime())) {
-                throw new BadRequestException("Saat olaraq əvvəldə qalan smenlərə keçid etmək mümkün deyil. Yalnız sonrakı smenə keçirmək olar.");
+                    && !newSlot.getStartTime().isAfter(now.toLocalTime()))) {
+                throw new BadRequestException("Artıq başlamış və ya vaxtı keçmiş smenə keçid etmək mümkün deyil.");
             }
 
             Long userId = shift.getUser().getId();
