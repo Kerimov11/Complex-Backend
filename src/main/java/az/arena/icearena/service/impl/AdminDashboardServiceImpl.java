@@ -135,7 +135,9 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
 
     private List<StockAlertDto> buildStockAlerts() {
         List<StockAlertDto> alerts = new ArrayList<>();
-        for (Skate skate : skateRepository.findAll()) {
+        List<Skate> skates = new ArrayList<>(skateRepository.findAll());
+        skates.sort(Comparator.comparing(Skate::getSize));
+        for (Skate skate : skates) {
             int total = value(skate.getTotalQuantity());
             int available = value(skate.getAvailableQuantity());
             int damaged = value(skate.getDamagedQuantity());
@@ -145,7 +147,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                         : (available <= 5 || availableRate < 20d) ? "LOW" : "DAMAGED";
                 alerts.add(StockAlertDto.builder()
                         .skateId(skate.getId())
-                        .size(skate.getSize())
+                        .size(skate.getDisplaySize())
                         .availableQuantity(available)
                         .totalQuantity(total)
                         .damagedQuantity(damaged)
@@ -153,7 +155,6 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                         .build());
             }
         }
-        alerts.sort(Comparator.comparing(StockAlertDto::getSize));
         return alerts;
     }
 

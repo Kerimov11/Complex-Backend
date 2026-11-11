@@ -32,7 +32,7 @@ public class VolunteerInventoryServiceImpl implements VolunteerInventoryService 
         double percent = total == 0 ? 0d : Math.round((available * 10000d) / total) / 100d;
         return VolunteerInventoryDto.builder()
                 .id(skate.getId())
-                .size(skate.getSize())
+                .size(skate.getDisplaySize())
                 .totalQuantity(total)
                 .availableQuantity(available)
                 .inUseQuantity(inUse)

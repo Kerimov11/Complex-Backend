@@ -106,7 +106,8 @@ public class SkateAdminServiceImpl implements SkateAdminService {
     private SkateDto toDto(Skate skate) {
         return SkateDto.builder()
                 .id(skate.getId())
-                .size(skate.getSize())
+                .size(skate.getDisplaySize())
+                .sortKey(skate.getSize())
                 .totalQuantity(value(skate.getTotalQuantity()))
                 .availableQuantity(value(skate.getAvailableQuantity()))
                 .damagedQuantity(value(skate.getDamagedQuantity()))

@@ -164,7 +164,7 @@ public class VolunteerReservationServiceImpl implements VolunteerReservationServ
                 .sessionEndTime(session == null ? null : session.getEndTime())
                 .entryTime(reservation.getEntryTime())
                 .durationMinutes(reservation.getDurationMinutes())
-                .skateSize(skate == null ? null : skate.getSize())
+                .skateSize(skate == null ? null : skate.getDisplaySize())
                 .status(reservation.getStatus())
                 .statusLabel(statusLabel(reservation, active))
                 .skateHandedOut(reservation.getSkateHandedOutAt() != null)

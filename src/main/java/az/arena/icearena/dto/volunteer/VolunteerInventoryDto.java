@@ -11,7 +11,7 @@ import lombok.NoArgsConstructor;
 @Builder
 public class VolunteerInventoryDto {
     private Long id;
-    private Integer size;
+    private String size;
     private int totalQuantity;
     private int availableQuantity;
     private int inUseQuantity;

@@ -216,7 +216,7 @@ public class VerificationServiceImpl implements VerificationService {
                         .valid(false)
                         .status("OUT_OF_STOCK")
                         .message("Bu ölçüdə kifayət qədər konki yoxdur (ölçü "
-                                + skate.getSize() + ", tələb " + entry.getValue()
+                                + skate.getDisplaySize() + ", tələb " + entry.getValue()
                                 + ", mövcud " + available + ").")
                         .build();
             }
@@ -374,8 +374,8 @@ public class VerificationServiceImpl implements VerificationService {
         List<String> sizes = reservations.stream()
                 .map(Reservation::getSkate)
                 .filter(skate -> skate != null && skate.getSize() != null)
-                .map(skate -> String.valueOf(skate.getSize()))
-                .sorted()
+                .sorted(java.util.Comparator.comparing(az.arena.icearena.entity.Skate::getSize))
+                .map(az.arena.icearena.entity.Skate::getDisplaySize)
                 .toList();
 
         String ownerName = fullName(user);
@@ -395,7 +395,7 @@ public class VerificationServiceImpl implements VerificationService {
                     .reservationId(reservation.getId())
                     .name(name)
                     .age(reservation.getParticipantAge())
-                    .skateSize(skate == null ? null : skate.getSize())
+                    .skateSize(skate == null ? null : skate.getDisplaySize())
                     .skateStockDeducted(Boolean.TRUE.equals(reservation.getSkateStockDeducted()))
                     .skateHandedOut(reservation.getSkateHandedOutAt() != null)
                     .skateHandedOutAt(reservation.getSkateHandedOutAt())

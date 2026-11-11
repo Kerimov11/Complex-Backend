@@ -134,7 +134,7 @@ public class ReservationActivationServiceImpl implements ReservationActivationSe
             if (available < required) {
                 throw new BadRequestException(
                         "Bu ölçüdə kifayət qədər konki yoxdur (ölçü "
-                                + skate.getSize() + ", tələb " + required
+                                + skate.getDisplaySize() + ", tələb " + required
                                 + ", mövcud " + available + ").");
             }
         }

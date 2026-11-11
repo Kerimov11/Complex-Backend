@@ -11,7 +11,7 @@ import lombok.NoArgsConstructor;
 @Builder
 public class StockAlertDto {
     private Long skateId;
-    private Integer size;
+    private String size;
     private Integer availableQuantity;
     private Integer totalQuantity;
     private Integer damagedQuantity;

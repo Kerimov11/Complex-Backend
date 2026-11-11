@@ -274,18 +274,56 @@ public class DataInitializer {
     private record TimeRange(LocalTime start, LocalTime end) {
     }
 
+    private static final int DEFAULT_SKATE_STOCK = 50;
+
+    /** Tənzimlənən (ölçüsü dəyişdirilə bilən) konkilər: açar ölçü -> aralıq etiketi. */
+    private static final java.util.Map<Integer, String> ADJUSTABLE_SKATES = new java.util.LinkedHashMap<>();
+    static {
+        ADJUSTABLE_SKATES.put(26, "26-32");
+        ADJUSTABLE_SKATES.put(32, "32-36");
+    }
+
+    /**
+     * Konki anbarı: 26-32 və 32-36 tənzimlənən konkilər (hər biri tək stok kimi),
+     * 36-47 tək ölçülər. Bu struktur bir dəfə tətbiq olunur — hər ölçüdə stok 50 ədəd
+     * edilir (hazırda istifadədə olan konkilər nəzərə alınır). Sonrakı startlarda admin
+     * tərəfindən edilən stok dəyişiklikləri toxunulmaz qalır.
+     */
     private void seedSkates() {
-        if (skateRepository.count() > 0) {
+        boolean alreadyMigrated = skateRepository.findBySize(26)
+                .map(s -> "26-32".equals(s.getLabel()))
+                .orElse(false);
+        if (alreadyMigrated) {
             return;
         }
 
-        for (int size = 36; size <= 45; size++) {
-            skateRepository.save(Skate.builder()
-                    .size(size)
-                    .totalQuantity(20)
-                    .availableQuantity(20)
-                    .build());
+        java.util.Map<Integer, String> desired = new java.util.LinkedHashMap<>(ADJUSTABLE_SKATES);
+        for (int size = 36; size <= 47; size++) {
+            desired.putIfAbsent(size, null);
         }
+
+        desired.forEach((size, label) -> {
+            Skate skate = skateRepository.findBySize(size).orElse(null);
+            if (skate == null) {
+                skateRepository.save(Skate.builder()
+                        .size(size)
+                        .label(label)
+                        .totalQuantity(DEFAULT_SKATE_STOCK)
+                        .availableQuantity(DEFAULT_SKATE_STOCK)
+                        .damagedQuantity(0)
+                        .build());
+                return;
+            }
+            int total = skate.getTotalQuantity() == null ? 0 : skate.getTotalQuantity();
+            int available = skate.getAvailableQuantity() == null ? 0 : skate.getAvailableQuantity();
+            int inUse = Math.max(0, total - available);
+            skate.setLabel(label);
+            skate.setTotalQuantity(DEFAULT_SKATE_STOCK);
+            skate.setAvailableQuantity(Math.max(0, DEFAULT_SKATE_STOCK - inUse));
+            skate.setDamagedQuantity(0);
+            skateRepository.save(skate);
+        });
+        log.info("Skate inventory migrated: 26-32, 32-36, 36-47 — {} pcs each", DEFAULT_SKATE_STOCK);
     }
 
     private void seedDiscountRules() {

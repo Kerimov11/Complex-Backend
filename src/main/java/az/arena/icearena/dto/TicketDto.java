@@ -41,7 +41,7 @@ public class TicketDto {
     @Builder.Default
     private List<Long> reservationIds = new ArrayList<>();
     @Builder.Default
-    private List<Integer> skateSizes = new ArrayList<>();
+    private List<String> skateSizes = new ArrayList<>();
     private Integer participantCount;
     private Integer activationCount;
     private Integer maxActivations;

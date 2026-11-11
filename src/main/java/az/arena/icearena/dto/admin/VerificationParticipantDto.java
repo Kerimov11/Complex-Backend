@@ -14,7 +14,7 @@ public class VerificationParticipantDto {
     private Long reservationId;
     private String name;
     private Integer age;
-    private Integer skateSize;
+    private String skateSize;
     private boolean skateStockDeducted;
     private boolean skateHandedOut;
     private LocalDateTime skateHandedOutAt;

@@ -54,6 +54,7 @@ public class SkateController {
         reservationActivationService.expireStaleReservations();
 
         List<SkateDto> skates = skateRepository.findAll().stream()
+                .sorted(java.util.Comparator.comparing(Skate::getSize))
                 .map(this::toDto)
                 .toList();
         return ResponseEntity.ok(skates);
@@ -62,7 +63,8 @@ public class SkateController {
     private SkateDto toDto(Skate skate) {
         return SkateDto.builder()
                 .id(skate.getId())
-                .size(skate.getSize())
+                .size(skate.getDisplaySize())
+                .sortKey(skate.getSize())
                 .totalQuantity(skate.getTotalQuantity())
                 .availableQuantity(skate.getAvailableQuantity())
                 .damagedQuantity(skate.getDamagedQuantity())

@@ -24,7 +24,7 @@ public class VolunteerReservationDto {
     private LocalTime sessionEndTime;
     private LocalTime entryTime;
     private Integer durationMinutes;
-    private Integer skateSize;
+    private String skateSize;
     private Reservation.Status status;
     private String statusLabel;
     private boolean skateHandedOut;

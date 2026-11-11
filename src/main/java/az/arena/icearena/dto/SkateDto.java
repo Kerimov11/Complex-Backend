@@ -11,7 +11,8 @@ import lombok.NoArgsConstructor;
 @Builder
 public class SkateDto {
     private Long id;
-    private Integer size;
+    private String size;
+    private Integer sortKey;
     private Integer totalQuantity;
     private Integer availableQuantity;
     private Integer damagedQuantity;

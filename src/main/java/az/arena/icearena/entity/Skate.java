@@ -28,4 +28,19 @@ public class Skate {
     @Builder.Default
     @Column(nullable = false)
     private Integer damagedQuantity = 0; // Zədələnib inventardan çıxarılan say
+
+    /**
+     * Tənzimlənən (sürüşən) konkilər üçün ölçü aralığı, məsələn "26-32" və ya "32-36".
+     * Boşdursa konki tək ölçülüdür və {@link #size} göstərilir.
+     */
+    @Column(length = 20)
+    private String label;
+
+    /** UI-da göstərilən ölçü: aralıq varsa "26-32", yoxdursa "38". */
+    public String getDisplaySize() {
+        if (label != null && !label.isBlank()) {
+            return label;
+        }
+        return size == null ? null : String.valueOf(size);
+    }
 }

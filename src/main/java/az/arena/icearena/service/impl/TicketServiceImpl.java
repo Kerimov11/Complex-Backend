@@ -241,11 +241,11 @@ public class TicketServiceImpl implements TicketService {
                 && !activeTimer
                 && remainingActivations > 0;
 
-        List<Integer> skateSizes = reservations.stream()
+        List<String> skateSizes = reservations.stream()
                 .map(Reservation::getSkate)
                 .filter(skate -> skate != null && skate.getSize() != null)
-                .map(Skate::getSize)
-                .sorted()
+                .sorted(java.util.Comparator.comparing(Skate::getSize))
+                .map(Skate::getDisplaySize)
                 .toList();
         List<Long> reservationIds = reservations.stream()
                 .map(Reservation::getId)
