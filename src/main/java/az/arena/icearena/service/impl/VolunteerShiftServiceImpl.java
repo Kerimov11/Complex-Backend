@@ -16,6 +16,7 @@ import az.arena.icearena.repository.VolunteerShiftRepository;
 import az.arena.icearena.service.VolunteerShiftService;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -36,9 +37,14 @@ public class VolunteerShiftServiceImpl implements VolunteerShiftService {
         User user = findUser(username);
         LocalDateTime now = LocalDateTime.now();
         return volunteerShiftRepository
-                .findByUserIdOrderByShiftSlotShiftDateDescShiftSlotStartTimeAsc(user.getId())
+                .findByUserIdOrderBySelectedAtDesc(user.getId())
                 .stream()
                 .map(shift -> shiftMapper.toDto(shift, now))
+                .sorted(Comparator
+                        .comparing(VolunteerShiftDto::getShiftDate,
+                                Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(VolunteerShiftDto::getStartTime,
+                                Comparator.nullsLast(Comparator.naturalOrder())))
                 .toList();
     }
 

@@ -12,7 +12,9 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -39,8 +41,8 @@ public class VolunteerShift {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @ManyToOne(fetch = FetchType.EAGER, optional = false)
-    @JoinColumn(name = "shift_slot_id", nullable = false)
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "shift_slot_id")
     private ShiftSlot shiftSlot;
 
     @Builder.Default
@@ -59,4 +61,15 @@ public class VolunteerShift {
 
     @Column(length = 50)
     private String assignedBy;
+
+    private LocalDate cancelledShiftDate;
+
+    private LocalTime cancelledStartTime;
+
+    private LocalTime cancelledEndTime;
+
+    private LocalDateTime cancelledAt;
+
+    @Column(length = 500)
+    private String cancellationMessage;
 }

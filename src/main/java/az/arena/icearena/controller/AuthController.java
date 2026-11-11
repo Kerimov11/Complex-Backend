@@ -3,7 +3,10 @@ package az.arena.icearena.controller;
 
 import az.arena.icearena.dto.AuthenticationRequest;
 import az.arena.icearena.dto.AuthenticationResponse;
+import az.arena.icearena.dto.ForgotPasswordRequest;
+import az.arena.icearena.dto.ForgotPasswordResponse;
 import az.arena.icearena.dto.RegisterRequest;
+import az.arena.icearena.dto.ResetPasswordRequest;
 import az.arena.icearena.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -28,5 +31,15 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<AuthenticationResponse> authenticate(@Valid @RequestBody AuthenticationRequest request) {
         return ResponseEntity.ok(authService.authenticate(request));
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ForgotPasswordResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        return ResponseEntity.ok(authService.requestPasswordReset(request));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<AuthenticationResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        return ResponseEntity.ok(authService.resetPassword(request));
     }
 }

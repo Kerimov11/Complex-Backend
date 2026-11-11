@@ -73,6 +73,16 @@ public class User {
     @Column
     private LocalDateTime identityConfirmedAt;
 
+    @JsonIgnore
+    @ToString.Exclude
+    @Column(length = 12)
+    private String passwordResetCode;
+
+    @JsonIgnore
+    @ToString.Exclude
+    @Column
+    private LocalDateTime passwordResetExpiresAt;
+
     @Builder.Default
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(name = "user_roles",

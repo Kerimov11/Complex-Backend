@@ -18,6 +18,8 @@ public interface VolunteerShiftRepository extends JpaRepository<VolunteerShift, 
 
     List<VolunteerShift> findByUserIdOrderByShiftSlotShiftDateDescShiftSlotStartTimeAsc(Long userId);
 
+    List<VolunteerShift> findByUserIdOrderBySelectedAtDesc(Long userId);
+
     Optional<VolunteerShift> findByUserIdAndShiftSlotId(Long userId, Long shiftSlotId);
 
     boolean existsByUserIdAndShiftSlotId(Long userId, Long shiftSlotId);

@@ -60,6 +60,21 @@ public class ReservationService {
                                          String username,
                                          boolean admin,
                                          String voucherCode) {
+        return createReservation(userId, sessionId, skateId, entryTime,
+                durationMinutes, username, admin, voucherCode, null, null);
+    }
+
+    @Transactional
+    public Reservation createReservation(Long userId,
+                                         Long sessionId,
+                                         Long skateId,
+                                         LocalTime entryTime,
+                                         Integer durationMinutes,
+                                         String username,
+                                         boolean admin,
+                                         String voucherCode,
+                                         String participantName,
+                                         Integer participantAge) {
         User user = resolveUser(userId, username, admin);
         if (username != null && !admin) {
             customerVerificationService.requireTicketPurchaseEligibility(user);
@@ -108,6 +123,8 @@ public class ReservationService {
                 .reservationExtensionCount(0)
                 .skateStockDeducted(false)
                 .voucherCode(normalizeVoucherCode(voucherCode))
+                .participantName(normalizeParticipantName(participantName))
+                .participantAge(participantAge)
                 .build();
 
         return reservationRepository.save(reservation);
@@ -292,6 +309,14 @@ public class ReservationService {
             return null;
         }
         String trimmed = voucherCode.trim();
+        return trimmed.isEmpty() ? null : trimmed.substring(0, Math.min(100, trimmed.length()));
+    }
+
+    private String normalizeParticipantName(String participantName) {
+        if (participantName == null) {
+            return null;
+        }
+        String trimmed = participantName.trim();
         return trimmed.isEmpty() ? null : trimmed.substring(0, Math.min(100, trimmed.length()));
     }
 }

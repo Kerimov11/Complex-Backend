@@ -68,6 +68,9 @@ public class TicketServiceImpl implements TicketService {
 
         BigDecimal price = request.getTicketType() == TicketType.BIG ? BIG_TICKET_PRICE : CHILD_TICKET_PRICE;
         List<TicketDto> ticketDtos = new ArrayList<>();
+        LocalDateTime now = LocalDateTime.now();
+        LocalTime entryTime = resolveEntryTime(session, now);
+        int durationMinutes = 60;
 
         for (int i = 0; i < request.getQuantity(); i++) {
             String ticketCode = UUID.randomUUID().toString();
@@ -78,8 +81,11 @@ public class TicketServiceImpl implements TicketService {
                     .qrCode(qrCode)
                     .ticketType(request.getTicketType())
                     .price(price)
-                    .purchaseDate(LocalDateTime.now())
+                    .purchaseDate(now)
                     .isUsed(false)
+                    .durationMinutes(durationMinutes)
+                    .entryTime(entryTime)
+                    .customerName(fullName(user))
                     .user(user)
                     .session(session)
                     .build();
@@ -281,5 +287,31 @@ public class TicketServiceImpl implements TicketService {
                 .skateStockDeducted(activeTimer)
                 .skateHandedOut(anyHandedOut)
                 .build();
+    }
+
+    private LocalTime resolveEntryTime(Session session, LocalDateTime now) {
+        if (session == null || session.getStartTime() == null) {
+            return now.toLocalTime();
+        }
+        if (session.getSessionDate() == null || !session.getSessionDate().equals(now.toLocalDate())) {
+            return session.getStartTime();
+        }
+        LocalTime current = now.toLocalTime();
+        if (current.isBefore(session.getStartTime())) {
+            return session.getStartTime();
+        }
+        if (session.getEndTime() != null && current.isAfter(session.getEndTime())) {
+            return session.getEndTime();
+        }
+        return current;
+    }
+
+    private String fullName(User user) {
+        if (user == null) {
+            return null;
+        }
+        String name = ((user.getFirstName() == null ? "" : user.getFirstName()) + " "
+                + (user.getLastName() == null ? "" : user.getLastName())).trim();
+        return name.isEmpty() ? user.getUsername() : name;
     }
 }

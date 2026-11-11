@@ -36,10 +36,13 @@ public class ReservationController {
             @DateTimeFormat(pattern = "HH:mm") LocalTime startTime,
             @RequestParam(required = false) Integer durationMinutes,
             @RequestParam(required = false) String voucherCode,
+            @RequestParam(required = false) String participantName,
+            @RequestParam(required = false) Integer participantAge,
             Principal principal,
             Authentication authentication) {
         return ResponseEntity.ok(create(userId, sessionId, skateId, startTime,
-                durationMinutes, voucherCode, principal, authentication));
+                durationMinutes, voucherCode, participantName, participantAge,
+                principal, authentication));
     }
 
     /** Frontend üçün əsas yaratma endpoint-i — state dəyişdiyi üçün POST. */
@@ -53,10 +56,13 @@ public class ReservationController {
             @DateTimeFormat(pattern = "HH:mm") LocalTime startTime,
             @RequestParam(required = false) Integer durationMinutes,
             @RequestParam(required = false) String voucherCode,
+            @RequestParam(required = false) String participantName,
+            @RequestParam(required = false) Integer participantAge,
             Principal principal,
             Authentication authentication) {
         return ResponseEntity.ok(create(userId, sessionId, skateId, startTime,
-                durationMinutes, voucherCode, principal, authentication));
+                durationMinutes, voucherCode, participantName, participantAge,
+                principal, authentication));
     }
 
     @GetMapping("/{reservationId}")
@@ -94,11 +100,14 @@ public class ReservationController {
                                LocalTime startTime,
                                Integer durationMinutes,
                                String voucherCode,
+                               String participantName,
+                               Integer participantAge,
                                Principal principal,
                                Authentication authentication) {
         return reservationService.createReservation(
                 userId, sessionId, skateId, startTime, durationMinutes,
-                principal.getName(), isAdmin(authentication), voucherCode);
+                principal.getName(), isAdmin(authentication), voucherCode,
+                participantName, participantAge);
     }
 
     private boolean isAdmin(Authentication authentication) {

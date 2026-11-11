@@ -1,5 +1,6 @@
 package az.arena.icearena.controller;
 
+import az.arena.icearena.dto.admin.ActiveGuestsDto;
 import az.arena.icearena.dto.admin.VerificationRequest;
 import az.arena.icearena.dto.admin.VerificationResultDto;
 import az.arena.icearena.service.VerificationService;
@@ -30,7 +31,27 @@ public class VerificationController {
     }
 
     @GetMapping("/lookup")
-    public ResponseEntity<VerificationResultDto> lookup(@RequestParam String code) {
-        return ResponseEntity.ok(verificationService.lookup(code));
+    public ResponseEntity<VerificationResultDto> lookup(@RequestParam String code,
+                                                        Principal principal) {
+        String username = principal == null ? null : principal.getName();
+        return ResponseEntity.ok(verificationService.lookup(code, username));
+    }
+
+    @GetMapping("/active")
+    public ResponseEntity<ActiveGuestsDto> active() {
+        return ResponseEntity.ok(verificationService.activeGuests());
+    }
+
+    /**
+     * Skan təsdiqləndikdən sonra konkini təhvil verir və lazım gələrsə
+     * stoku məhz bu anda çıxır. İkinci çağırış stoku təkrar azaltmır.
+     */
+    @PostMapping("/handover")
+    @PreAuthorize("hasAnyRole('ADMIN','COORDINATOR','CASHIER','VOLUNTEER')")
+    public ResponseEntity<VerificationResultDto> handover(
+            @Valid @RequestBody VerificationRequest request,
+            Principal principal) {
+        return ResponseEntity.ok(verificationService.handover(
+                request.getCode(), principal.getName()));
     }
 }

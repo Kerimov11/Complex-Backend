@@ -15,6 +15,7 @@ import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -64,6 +65,32 @@ public class Ticket {
 
     @Column
     private Integer durationMinutes;
+
+    /** Biletin nəzərdə tutulan giriş vaxtı. */
+    private LocalTime entryTime;
+
+    /** Kassada (Kassa QR) təsdiqləndiyi an. */
+    private LocalDateTime cashierVerifiedAt;
+
+    @Column(length = 50)
+    private String cashierVerifiedBy;
+
+    /** Turniketdə QR təsdiqləndiyi faktiki an. */
+    private LocalDateTime checkedInAt;
+
+    @Column(length = 50)
+    private String checkedInBy;
+
+    /** POS satışında müştərinin adı (user sahəsi kassiri saxlayır). */
+    @Column(length = 100)
+    private String customerName;
+
+    @Column(length = 30)
+    private String customerPhone;
+
+    /** POS satış qrupu üçün ümumi çek referansı. */
+    @Column(length = 100)
+    private String saleReference;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)

@@ -78,7 +78,13 @@ public class DataInitializer {
     }
 
     private void seedDemoUser() {
-        if (userRepository.existsByUsername("demo")) {
+        User existing = userRepository.findByUsername("demo").orElse(null);
+        if (existing != null) {
+            if (existing.getDateOfBirth() == null) {
+                existing.setDateOfBirth(LocalDate.of(2006, 7, 25));
+                existing.setAgeVerifiedAt(java.time.LocalDateTime.now());
+                userRepository.save(existing);
+            }
             return;
         }
 
@@ -95,6 +101,8 @@ public class DataInitializer {
                 .firstName("Demo")
                 .lastName("User")
                 .phoneNumber("+994501112233")
+                .dateOfBirth(LocalDate.of(2006, 7, 25))
+                .ageVerifiedAt(java.time.LocalDateTime.now())
                 .roles(roles)
                 .build();
 

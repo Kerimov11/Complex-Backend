@@ -2,6 +2,7 @@ package az.arena.icearena.mapper;
 
 import az.arena.icearena.dto.shift.StationCountDto;
 import az.arena.icearena.dto.shift.VolunteerShiftDto;
+import az.arena.icearena.entity.ShiftAssignmentStatus;
 import az.arena.icearena.entity.Station;
 import az.arena.icearena.entity.User;
 import az.arena.icearena.entity.VolunteerShift;
@@ -18,15 +19,24 @@ public class ShiftMapper {
 
     public VolunteerShiftDto toDto(VolunteerShift shift, LocalDateTime now) {
         User user = shift.getUser();
+        LocalDate shiftDate = shift.getShiftSlot() != null
+                ? shift.getShiftSlot().getShiftDate()
+                : shift.getCancelledShiftDate();
+        LocalTime startTime = shift.getShiftSlot() != null
+                ? shift.getShiftSlot().getStartTime()
+                : shift.getCancelledStartTime();
+        LocalTime endTime = shift.getShiftSlot() != null
+                ? shift.getShiftSlot().getEndTime()
+                : shift.getCancelledEndTime();
         return VolunteerShiftDto.builder()
                 .id(shift.getId())
                 .userId(user == null ? null : user.getId())
                 .username(user == null ? null : user.getUsername())
                 .fullName(fullName(user))
                 .shiftSlotId(shift.getShiftSlot() == null ? null : shift.getShiftSlot().getId())
-                .shiftDate(shift.getShiftSlot() == null ? null : shift.getShiftSlot().getShiftDate())
-                .startTime(shift.getShiftSlot() == null ? null : shift.getShiftSlot().getStartTime())
-                .endTime(shift.getShiftSlot() == null ? null : shift.getShiftSlot().getEndTime())
+                .shiftDate(shiftDate)
+                .startTime(startTime)
+                .endTime(endTime)
                 .station(shift.getStation())
                 .stationLabel(shift.getStation() == null ? null : shift.getStation().getLabel())
                 .status(shift.getStatus())
@@ -34,11 +44,19 @@ public class ShiftMapper {
                 .selectedAt(shift.getSelectedAt())
                 .assignedAt(shift.getAssignedAt())
                 .assignedBy(shift.getAssignedBy())
+                .cancelledAt(shift.getCancelledAt())
+                .cancellationMessage(shift.getCancellationMessage())
                 .build();
     }
 
     public String liveStatus(VolunteerShift shift, LocalDateTime now) {
-        if (shift == null || shift.getShiftSlot() == null) {
+        if (shift == null) {
+            return "UNKNOWN";
+        }
+        if (shift.getStatus() == ShiftAssignmentStatus.CANCELLED) {
+            return "CANCELLED";
+        }
+        if (shift.getShiftSlot() == null) {
             return "UNKNOWN";
         }
         LocalDate date = shift.getShiftSlot().getShiftDate();

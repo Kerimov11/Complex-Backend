@@ -2,6 +2,7 @@ package az.arena.icearena.service.impl;
 
 import az.arena.icearena.dto.shift.ShiftSlotDto;
 import az.arena.icearena.dto.shift.ShiftSlotRequest;
+import az.arena.icearena.entity.ShiftAssignmentStatus;
 import az.arena.icearena.entity.ShiftSlot;
 import az.arena.icearena.entity.User;
 import az.arena.icearena.entity.VolunteerShift;
@@ -116,10 +117,25 @@ public class ShiftSlotServiceImpl implements ShiftSlotService {
     @Transactional
     public void delete(Long id) {
         ShiftSlot slot = findSlot(id);
-        long selectedCount = volunteerShiftRepository.countByShiftSlotId(id);
-        if (selectedCount > 0) {
-            throw new BadRequestException(
-                    "Bu smenə " + selectedCount + " könüllü seçilib. Əvvəlcə onları başqa smenə keçirin.");
+        List<VolunteerShift> shifts = volunteerShiftRepository.findByShiftSlotId(id);
+        if (!shifts.isEmpty()) {
+            LocalDateTime now = LocalDateTime.now();
+            String message = String.format(
+                    "Seçdiyiniz %s (%s–%s) smeni ləğv edilmişdir.",
+                    slot.getShiftDate(),
+                    slot.getStartTime(),
+                    slot.getEndTime());
+            for (VolunteerShift shift : shifts) {
+                shift.setCancelledShiftDate(slot.getShiftDate());
+                shift.setCancelledStartTime(slot.getStartTime());
+                shift.setCancelledEndTime(slot.getEndTime());
+                shift.setCancelledAt(now);
+                shift.setCancellationMessage(message);
+                shift.setStatus(ShiftAssignmentStatus.CANCELLED);
+                shift.setShiftSlot(null);
+            }
+            volunteerShiftRepository.saveAll(shifts);
+            volunteerShiftRepository.flush();
         }
         shiftSlotRepository.delete(slot);
     }

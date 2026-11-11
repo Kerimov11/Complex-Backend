@@ -56,7 +56,10 @@ public class Reservation {
     @Column(nullable = false)
     private Integer reservationExtensionCount = 0;
 
-    /** Konki stoku yalnız aktivləşdirmə zamanı çıxılır. */
+    /**
+     * Konki stoku aktivləşdirmə və ya turniketdə təhvil zamanı çıxılır.
+     * Bu bayraq true olduqda stok ikinci dəfə çıxılmır.
+     */
     @Builder.Default
     @Column(nullable = false)
     private Boolean skateStockDeducted = false;
@@ -70,6 +73,19 @@ public class Reservation {
     /** Frontend rəqəmsal bileti / QR kodu. Bir sifarişin bütün rezervasiyaları eyni kodu daşıyır. */
     @Column(length = 100)
     private String voucherCode;
+
+    /** İştirakçının adı (onlayn bilet alışında doldurulur). */
+    @Column(length = 100)
+    private String participantName;
+
+    /** İştirakçının yaşı (onlayn bilet alışında doldurulur). */
+    private Integer participantAge;
+
+    /** Kassada (Kassa QR) təsdiqləndiyi an. */
+    private LocalDateTime cashierVerifiedAt;
+
+    @Column(length = 50)
+    private String cashierVerifiedBy;
 
     private LocalDateTime checkedInAt;
 

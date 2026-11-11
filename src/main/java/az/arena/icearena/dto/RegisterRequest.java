@@ -3,7 +3,9 @@ package az.arena.icearena.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.time.LocalDate;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -36,7 +38,11 @@ public class RegisterRequest {
     @Size(max = 50, message = "Last name must not exceed 50 characters")
     private String lastName;
 
+    @NotBlank(message = "Telefon nömrəsi tələb olunur")
     @Size(max = 20, message = "Phone number must not exceed 20 characters")
     private String phoneNumber;
+
+    @NotNull(message = "Doğum tarixi tələb olunur")
+    private LocalDate dateOfBirth;
 
 }

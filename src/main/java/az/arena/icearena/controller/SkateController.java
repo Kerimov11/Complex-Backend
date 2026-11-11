@@ -1,17 +1,14 @@
 package az.arena.icearena.controller;
 
 import az.arena.icearena.dto.SkateDto;
-import az.arena.icearena.entity.Reservation;
-import az.arena.icearena.entity.Session;
 import az.arena.icearena.entity.Skate;
 import az.arena.icearena.exception.ResourceNotFoundException;
-import az.arena.icearena.repository.ReservationRepository;
 import az.arena.icearena.repository.SessionRepository;
 import az.arena.icearena.repository.SkateRepository;
+import az.arena.icearena.service.ReservationActivationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
-import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,16 +26,14 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Skates", description = "Konki ölçüləri, ümumi və sessiya üzrə stok")
 public class SkateController {
 
-    private static final Set<Reservation.Status> ACTIVE_STATUSES =
-            Set.of(Reservation.Status.PENDING, Reservation.Status.CONFIRMED);
-
     private final SkateRepository skateRepository;
     private final SessionRepository sessionRepository;
-    private final ReservationRepository reservationRepository;
+    private final ReservationActivationService reservationActivationService;
 
     @GetMapping
     @Operation(summary = "Bütün konki ölçüləri və ümumi mövcud stok")
     public ResponseEntity<List<SkateDto>> getAllSkates() {
+        reservationActivationService.expireStaleReservations();
         List<SkateDto> skates = skateRepository.findAll().stream()
                 .map(this::toDto)
                 .toList();
@@ -46,31 +41,20 @@ public class SkateController {
     }
 
     /**
-     * Konkret sessiya üçün stok. Bir ölçüdə artıq rezerv olunmuş cütlər
-     * çıxılır; sessiyalar üst-üstə düşmədiyi üçün digər sessiyaların
-     * rezervləri bu sessiyanın stokunu azaltmır.
+     * Konkret sessiya üçün stok. Onlayn bilet alınanda konki dərhal stokdan çıxılmır —
+     * yalnız müştəri konki rezervasiyasını aktivləşdirdikdə və ya könüllü/əməkdaş
+     * "Konki təhvil verildi" düyməsini basdıqda stokdan azalır.
      */
     @GetMapping("/session/{sessionId}")
     @Operation(summary = "Konkret sessiya üçün qalan konki stoku")
     public ResponseEntity<List<SkateDto>> getSkatesBySession(@PathVariable Long sessionId) {
-        Session session = sessionRepository.findById(sessionId)
-                .orElseThrow(() -> new ResourceNotFoundException("Session not found with id: " + sessionId));
+        if (!sessionRepository.existsById(sessionId)) {
+            throw new ResourceNotFoundException("Session not found with id: " + sessionId);
+        }
+        reservationActivationService.expireStaleReservations();
 
         List<SkateDto> skates = skateRepository.findAll().stream()
-                .map(skate -> {
-                    long reserved = reservationRepository
-                            .countBySessionIdAndSkateIdAndStatusIn(
-                                    session.getId(), skate.getId(), ACTIVE_STATUSES);
-                    int total = skate.getTotalQuantity() == null ? 0 : skate.getTotalQuantity();
-                    int available = Math.max(0, total - (int) reserved);
-                    return SkateDto.builder()
-                            .id(skate.getId())
-                            .size(skate.getSize())
-                            .totalQuantity(total)
-                            .availableQuantity(available)
-                            .damagedQuantity(skate.getDamagedQuantity())
-                            .build();
-                })
+                .map(this::toDto)
                 .toList();
         return ResponseEntity.ok(skates);
     }

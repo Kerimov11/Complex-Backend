@@ -1,18 +1,35 @@
 package az.arena.icearena.service.impl;
 
+import az.arena.icearena.dto.admin.ActiveGuestDto;
+import az.arena.icearena.dto.admin.ActiveGuestsDto;
+import az.arena.icearena.dto.admin.VerificationParticipantDto;
 import az.arena.icearena.dto.admin.VerificationResultDto;
+import az.arena.icearena.entity.Payment;
 import az.arena.icearena.entity.Reservation;
 import az.arena.icearena.entity.Session;
+import az.arena.icearena.entity.Skate;
 import az.arena.icearena.entity.Ticket;
 import az.arena.icearena.entity.User;
+import az.arena.icearena.repository.PaymentRepository;
 import az.arena.icearena.repository.ReservationRepository;
+import az.arena.icearena.repository.SkateRepository;
 import az.arena.icearena.repository.TicketRepository;
+import az.arena.icearena.service.ReservationActivationService;
 import az.arena.icearena.service.VerificationService;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,8 +38,13 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class VerificationServiceImpl implements VerificationService {
 
+    private static final int DEFAULT_DURATION_MINUTES = 60;
+
     private final ReservationRepository reservationRepository;
     private final TicketRepository ticketRepository;
+    private final SkateRepository skateRepository;
+    private final PaymentRepository paymentRepository;
+    private final ReservationActivationService reservationActivationService;
 
     @Override
     @Transactional
@@ -33,7 +55,7 @@ public class VerificationServiceImpl implements VerificationService {
         }
 
         List<Reservation> reservations = reservationRepository
-                .findByVoucherCodeIgnoreCase(normalized);
+                .findByVoucherCodeIgnoreCaseForUpdate(normalized);
         if (!reservations.isEmpty()) {
             VerificationResultDto check = validateReservations(reservations, normalized);
             if (!check.isValid()) {
@@ -41,79 +63,290 @@ public class VerificationServiceImpl implements VerificationService {
             }
             LocalDateTime now = LocalDateTime.now();
             for (Reservation reservation : reservations) {
+                if (reservation.getCashierVerifiedAt() == null) {
+                    reservation.setCashierVerifiedAt(now);
+                    reservation.setCashierVerifiedBy(username);
+                }
                 reservation.setCheckedInAt(now);
                 reservation.setCheckedInBy(username);
                 reservationRepository.save(reservation);
             }
-            check.setCheckedInAt(now);
-            check.setCheckedInBy(username);
-            check.setStatus("CHECKED_IN");
-            check.setMessage("Bilet uğurla təsdiqləndi və giriş qeydə alındı.");
-            return check;
+            return reservationBuilder(reservations, normalized)
+                    .valid(true)
+                    .status("CHECKED_IN")
+                    .message("Bilet uğurla təsdiqləndi. Bu QR kod artıq təkrar skan edilə bilməz.")
+                    .checkedInAt(now)
+                    .checkedInBy(username)
+                    .build();
         }
 
-        Optional<Ticket> ticket = findTicket(normalized);
+        Optional<Ticket> ticket = findTicket(normalized, true);
         if (ticket.isPresent()) {
-            return verifyTicket(ticket.get(), normalized);
+            return verifyTicket(ticket.get(), normalized, username);
         }
 
         return invalid(code, "Bu koda uyğun bilet tapılmadı.");
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public VerificationResultDto lookup(String code) {
+        return lookup(code, null);
+    }
+
+    @Override
+    @Transactional
+    public VerificationResultDto lookup(String code, String username) {
         String normalized = normalize(code);
         if (normalized == null) {
             return invalid(code, "Kod boşdur.");
         }
         List<Reservation> reservations = reservationRepository
-                .findByVoucherCodeIgnoreCase(normalized);
+                .findByVoucherCodeIgnoreCaseForUpdate(normalized);
         if (!reservations.isEmpty()) {
-            return validateReservations(reservations, normalized);
+            VerificationResultDto check = validateReservations(reservations, normalized);
+            if (!check.isValid()) {
+                return check;
+            }
+            LocalDateTime now = LocalDateTime.now();
+            for (Reservation reservation : reservations) {
+                if (reservation.getCashierVerifiedAt() == null) {
+                    reservation.setCashierVerifiedAt(now);
+                    reservation.setCashierVerifiedBy(username);
+                    reservationRepository.save(reservation);
+                }
+            }
+            return reservationBuilder(reservations, normalized)
+                    .valid(true)
+                    .status("VALID")
+                    .message("Bilet kassada təsdiqləndi və Aktiv bilet siyahısına əlavə olundu.")
+                    .build();
         }
-        Optional<Ticket> ticket = findTicket(normalized);
+        Optional<Ticket> ticket = findTicket(normalized, true);
         if (ticket.isPresent()) {
-            return lookupTicket(ticket.get(), normalized);
+            Ticket found = ticket.get();
+            VerificationResultDto check = lookupTicket(found, normalized);
+            if (check.isValid() && found.getCashierVerifiedAt() == null) {
+                LocalDateTime now = LocalDateTime.now();
+                found.setCashierVerifiedAt(now);
+                found.setCashierVerifiedBy(username);
+                ticketRepository.save(found);
+                check.setCashierVerifiedAt(now);
+                check.setCashierVerifiedBy(username);
+            }
+            return check;
         }
         return invalid(code, "Bu koda uyğun bilet tapılmadı.");
+    }
+
+    /**
+     * Turniket skanından sonra konkini müştəriyə təhvil verir.
+     * Stok yalnız bu düymə basılanda, hələ çıxılmayıbsa, çıxılır.
+     * Eyni bilet üçün ikinci dəfə stok çıxılmır.
+     */
+    @Override
+    @Transactional
+    public VerificationResultDto handover(String code, String username) {
+        String normalized = normalize(code);
+        if (normalized == null) {
+            return invalid(code, "Kod boşdur.");
+        }
+
+        reservationActivationService.expireStaleReservations();
+
+        List<Reservation> reservations = reservationRepository
+                .findByVoucherCodeIgnoreCaseForUpdate(normalized);
+        if (reservations.isEmpty()) {
+            return invalid(code, "Bu koda uyğun onlayn bilet tapılmadı.");
+        }
+
+        if (reservations.stream().anyMatch(r -> r.getSkateHandedOutAt() != null)) {
+            return reservationBuilder(reservations, normalized)
+                    .valid(false)
+                    .status("ALREADY_HANDED_OUT")
+                    .message("Bu biletin konkiləri artıq təhvil verilib.")
+                    .build();
+        }
+
+        if (reservations.stream().anyMatch(r -> r.getCashierVerifiedAt() == null && r.getCheckedInAt() == null)) {
+            return reservationBuilder(reservations, normalized)
+                    .valid(false)
+                    .status("NOT_CHECKED_IN")
+                    .message("Əvvəlcə Kassa QR və ya Turniketdə QR kodu skan edib bileti təsdiqləyin.")
+                    .build();
+        }
+
+        if (reservations.stream().anyMatch(r -> r.getStatus() != Reservation.Status.CONFIRMED)) {
+            return reservationBuilder(reservations, normalized)
+                    .valid(false)
+                    .status("PAYMENT_PENDING")
+                    .message("Bilet ödənişlə təsdiqlənmədiyi üçün konki təhvil verilə bilməz.")
+                    .build();
+        }
+
+        Map<Long, Integer> requiredBySkate = new LinkedHashMap<>();
+        for (Reservation reservation : reservations) {
+            if (Boolean.TRUE.equals(reservation.getSkateStockDeducted())) {
+                continue;
+            }
+            Skate skate = reservation.getSkate();
+            if (skate == null || skate.getId() == null) {
+                return reservationBuilder(reservations, normalized)
+                        .valid(false)
+                        .status("NOT_FOUND")
+                        .message("Rezervasiyada konki ölçüsü göstərilməyib.")
+                        .build();
+            }
+            requiredBySkate.merge(skate.getId(), 1, Integer::sum);
+        }
+
+        List<Map.Entry<Long, Integer>> lockedInOrder = requiredBySkate.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .toList();
+        Map<Long, Skate> lockedSkates = new LinkedHashMap<>();
+        // Əvvəlcə bütün ölçüləri yoxla, sonra stoku çıx. Beləliklə, ikinci
+        // ölçüdə stok çatmadıqda birinci ölçünün stoku yarımçıq azalmır.
+        for (Map.Entry<Long, Integer> entry : lockedInOrder) {
+            Skate skate = skateRepository.findByIdForUpdate(entry.getKey())
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Konki tapılmadı: " + entry.getKey()));
+            int available = skate.getAvailableQuantity() == null ? 0 : skate.getAvailableQuantity();
+            if (available < entry.getValue()) {
+                return reservationBuilder(reservations, normalized)
+                        .valid(false)
+                        .status("OUT_OF_STOCK")
+                        .message("Bu ölçüdə kifayət qədər konki yoxdur (ölçü "
+                                + skate.getSize() + ", tələb " + entry.getValue()
+                                + ", mövcud " + available + ").")
+                        .build();
+            }
+            lockedSkates.put(entry.getKey(), skate);
+        }
+        for (Map.Entry<Long, Integer> entry : lockedInOrder) {
+            Skate skate = lockedSkates.get(entry.getKey());
+            int available = skate.getAvailableQuantity() == null ? 0 : skate.getAvailableQuantity();
+            skate.setAvailableQuantity(available - entry.getValue());
+            skateRepository.save(skate);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        for (Reservation reservation : reservations) {
+            reservation.setSkateStockDeducted(true);
+            reservation.setSkateHandedOutAt(now);
+            reservation.setSkateHandedOutBy(username);
+            reservation.setTimerExpiresAt(null);
+            reservationRepository.save(reservation);
+        }
+
+        return reservationBuilder(reservations, normalized)
+                .valid(true)
+                .status("HANDED_OUT")
+                .message("Konki təhvil verildi və stokdan çıxıldı. Bu əməliyyat təkrar edilə bilməz.")
+                .build();
+    }
+
+    /**
+     * Xüsusi panellər üçün iki ayrı siyahı:
+     *  - aktivTickets: hələ turniketdən keçməyən etibarlı biletlər;
+     *  - onIce: turniketdə təsdiqlənib hazırda buzda olan müştərilər.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public ActiveGuestsDto activeGuests() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDate today = now.toLocalDate();
+        List<ActiveGuestDto> activeTickets = new ArrayList<>();
+        List<ActiveGuestDto> onIce = new ArrayList<>();
+
+        List<Reservation> reservations = reservationRepository
+                .findByStatusInAndSessionSessionDateGreaterThanEqualOrderBySessionSessionDateAscSessionStartTimeAscIdAsc(
+                        List.of(Reservation.Status.CONFIRMED), today.minusDays(1));
+        Map<String, List<Reservation>> groups = new LinkedHashMap<>();
+        for (Reservation reservation : reservations) {
+            String code = reservation.getVoucherCode();
+            if (code == null || code.isBlank()) {
+                code = "RES-" + reservation.getId();
+            }
+            groups.computeIfAbsent(code, key -> new ArrayList<>()).add(reservation);
+        }
+        for (Map.Entry<String, List<Reservation>> entry : groups.entrySet()) {
+            List<Reservation> group = entry.getValue();
+            VerificationResultDto result = reservationBuilder(group, entry.getKey()).build();
+            boolean checkedIn = group.stream().anyMatch(r -> r.getCheckedInAt() != null);
+            boolean cashierVerified = group.stream().anyMatch(r -> r.getCashierVerifiedAt() != null);
+            if (checkedIn) {
+                if (result.isActiveOnIce()) {
+                    onIce.add(toActiveGuest(result, true));
+                }
+            } else if (cashierVerified) {
+                Session session = group.get(0).getSession();
+                LocalDateTime sessionEnd = sessionEnd(session);
+                if (session == null || session.getSessionDate() == null
+                        || !session.getSessionDate().isBefore(today)
+                        && (sessionEnd == null || sessionEnd.isAfter(now))) {
+                    activeTickets.add(toActiveGuest(result, false));
+                }
+            }
+        }
+
+        for (Ticket ticket : ticketRepository.findAll()) {
+            VerificationResultDto result = lookupTicket(ticket, ticket.getTicketCode());
+            if (Boolean.TRUE.equals(ticket.getIsUsed())) {
+                if (result.isActiveOnIce()) {
+                    onIce.add(toActiveGuest(result, true));
+                }
+            } else if (ticket.getCashierVerifiedAt() != null) {
+                Session session = ticket.getSession();
+                LocalDateTime sessionEnd = sessionEnd(session);
+                if (session == null || session.getSessionDate() == null
+                        || !session.getSessionDate().isBefore(today)
+                        && (sessionEnd == null || sessionEnd.isAfter(now))) {
+                    activeTickets.add(toActiveGuest(result, false));
+                }
+            }
+        }
+
+        activeTickets.sort(Comparator
+                .comparing(ActiveGuestDto::getCashierVerifiedAt,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(ActiveGuestDto::getSessionDate,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(ActiveGuestDto::getSessionStartTime,
+                        Comparator.nullsLast(Comparator.naturalOrder())));
+        onIce.sort(Comparator
+                .comparing(ActiveGuestDto::getCheckedInAt,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparingLong(ActiveGuestDto::getMinutesRemaining));
+
+        return ActiveGuestsDto.builder()
+                .activeTickets(activeTickets)
+                .onIce(onIce)
+                .build();
     }
 
     private VerificationResultDto validateReservations(List<Reservation> reservations, String code) {
         Reservation first = reservations.get(0);
         Session session = first.getSession();
-        User user = first.getUser();
-        List<String> sizes = reservations.stream()
-                .map(Reservation::getSkate)
-                .filter(skate -> skate != null)
-                .map(skate -> String.valueOf(skate.getSize()))
-                .distinct()
-                .toList();
-        VerificationResultDto.VerificationResultDtoBuilder builder = baseBuilder(code)
-                .source("RESERVATION")
-                .ownerName(fullName(user))
-                .ownerUsername(user == null ? null : user.getUsername())
-                .sessionDate(session == null ? null : session.getSessionDate())
-                .sessionStartTime(session == null ? null : session.getStartTime())
-                .sessionEndTime(session == null ? null : session.getEndTime())
-                .participantCount(reservations.size())
-                .skateSizes(sizes);
+        VerificationResultDto.VerificationResultDtoBuilder builder =
+                reservationBuilder(reservations, code);
 
-        if (session != null && session.getSessionDate() != null
-                && session.getSessionDate().isBefore(LocalDate.now())) {
-            return builder.valid(false).status("EXPIRED")
-                    .message("Bu sessiyanın tarixi keçib; bilet etibarsızdır.").build();
-        }
-        if (reservations.stream().allMatch(r -> r.getCheckedInAt() != null)) {
+        if (reservations.stream().anyMatch(r -> r.getCheckedInAt() != null)) {
             Reservation checked = reservations.stream()
                     .filter(r -> r.getCheckedInAt() != null)
                     .findFirst()
                     .orElse(first);
             return builder.valid(false).status("ALREADY_USED")
-                    .message("Bu bilet artıq scan edilib.")
+                    .message("Bu QR bilet istifadə olunub.")
                     .checkedInAt(checked.getCheckedInAt())
                     .checkedInBy(checked.getCheckedInBy())
                     .build();
+        }
+        LocalDateTime sessionEnd = sessionEnd(session);
+        if (session != null && session.getSessionDate() != null
+                && (session.getSessionDate().isBefore(LocalDate.now())
+                || (sessionEnd != null && !sessionEnd.isAfter(LocalDateTime.now())))) {
+            return builder.valid(false).status("EXPIRED")
+                    .message("Bu sessiyanın vaxtı keçib; bilet etibarsızdır.").build();
         }
         boolean hasPending = reservations.stream()
                 .anyMatch(r -> r.getStatus() == Reservation.Status.PENDING);
@@ -128,50 +361,359 @@ public class VerificationServiceImpl implements VerificationService {
                     .message("Bu bilet ləğv edilib və ya vaxtı bitib.").build();
         }
         return builder.valid(true).status("VALID")
-                .message("Bilet etibarlıdır; turniketdən keçirilə bilər.").build();
+                .message("Bilet etibarlıdır; hələ təsdiqlənməyib.").build();
     }
 
-    private VerificationResultDto verifyTicket(Ticket ticket, String code) {
+    private VerificationResultDto.VerificationResultDtoBuilder reservationBuilder(
+            List<Reservation> reservations, String code) {
+        Reservation first = reservations.get(0);
+        Session session = first.getSession();
+        User user = first.getUser();
+        Payment payment = findPaymentForReservations(reservations);
+
+        List<String> sizes = reservations.stream()
+                .map(Reservation::getSkate)
+                .filter(skate -> skate != null && skate.getSize() != null)
+                .map(skate -> String.valueOf(skate.getSize()))
+                .sorted()
+                .toList();
+
+        String ownerName = fullName(user);
+        List<VerificationParticipantDto> participants = new ArrayList<>();
+        for (int i = 0; i < reservations.size(); i++) {
+            Reservation reservation = reservations.get(i);
+            Skate skate = reservation.getSkate();
+            String name = reservation.getParticipantName();
+            if (name == null || name.isBlank()) {
+                if (ownerName != null && !ownerName.isBlank()) {
+                    name = i == 0 ? ownerName : ownerName + " (Qrup üzvü " + (i + 1) + ")";
+                } else {
+                    name = "İştirakçı " + (i + 1);
+                }
+            }
+            participants.add(VerificationParticipantDto.builder()
+                    .reservationId(reservation.getId())
+                    .name(name)
+                    .age(reservation.getParticipantAge())
+                    .skateSize(skate == null ? null : skate.getSize())
+                    .skateStockDeducted(Boolean.TRUE.equals(reservation.getSkateStockDeducted()))
+                    .skateHandedOut(reservation.getSkateHandedOutAt() != null)
+                    .skateHandedOutAt(reservation.getSkateHandedOutAt())
+                    .skateHandedOutBy(reservation.getSkateHandedOutBy())
+                    .build());
+        }
+
+        boolean allCashierVerified = reservations.stream()
+                .allMatch(r -> r.getCashierVerifiedAt() != null);
+        boolean allCheckedIn = reservations.stream()
+                .allMatch(r -> r.getCheckedInAt() != null);
+        boolean anyHandedOut = reservations.stream()
+                .anyMatch(r -> r.getSkateHandedOutAt() != null);
+        boolean allHandedOut = reservations.stream()
+                .allMatch(r -> r.getSkateHandedOutAt() != null);
+        boolean allStockDeducted = reservations.stream()
+                .allMatch(r -> Boolean.TRUE.equals(r.getSkateStockDeducted()));
+        Reservation cashierChecked = reservations.stream()
+                .filter(r -> r.getCashierVerifiedAt() != null)
+                .findFirst()
+                .orElse(null);
+        Reservation checked = reservations.stream()
+                .filter(r -> r.getCheckedInAt() != null)
+                .findFirst()
+                .orElse(null);
+        Reservation handedOut = reservations.stream()
+                .filter(r -> r.getSkateHandedOutAt() != null)
+                .findFirst()
+                .orElse(null);
+
+        int duration = resolveDuration(first.getDurationMinutes(), session);
+        LocalTime entryTime = first.getEntryTime();
+        LocalDateTime checkedInAt = checked == null ? null : checked.getCheckedInAt();
+        LocalDateTime endsAt = resolveEndsAt(session, entryTime, duration, checkedInAt);
+        boolean activeOnIce = isOnIce(session, checkedInAt, endsAt);
+
+        return VerificationResultDto.builder()
+                .code(code == null ? null : code.trim())
+                .source("RESERVATION")
+                .ownerName(ownerName)
+                .ownerUsername(user == null ? null : user.getUsername())
+                .customerName(ownerName)
+                .sessionDate(session == null ? null : session.getSessionDate())
+                .sessionStartTime(session == null ? null : session.getStartTime())
+                .sessionEndTime(session == null ? null : session.getEndTime())
+                .entryTime(entryTime)
+                .durationMinutes(duration)
+                .participantCount(reservations.size())
+                .skateSizes(sizes)
+                .participants(participants)
+                .reservationIds(reservations.stream().map(Reservation::getId).toList())
+                .ticketCode(code == null ? null : code.trim())
+                .ticketType("ONLINE")
+                .price(payment == null ? null : payment.getAmount())
+                .paymentMethod(payment == null || payment.getPaymentMethod() == null
+                        ? null : payment.getPaymentMethod().name())
+                .purchaseDate(payment == null ? first.getCreatedAt() : payment.getPaymentDate())
+                .saleReference(payment == null ? null : payment.getReference())
+                .cashierVerifiedAt(cashierChecked == null ? null : cashierChecked.getCashierVerifiedAt())
+                .cashierVerifiedBy(cashierChecked == null ? null : cashierChecked.getCashierVerifiedBy())
+                .checkedInAt(checkedInAt)
+                .checkedInBy(checked == null ? null : checked.getCheckedInBy())
+                .activeOnIce(activeOnIce)
+                .endsAt(endsAt)
+                .minutesRemaining(activeOnIce ? remainingMinutes(endsAt) : 0)
+                .minutesUntilSessionEnd(remainingMinutes(sessionEnd(session)))
+                .skateHandedOut(allHandedOut && anyHandedOut)
+                .skateHandedOutAt(handedOut == null ? null : handedOut.getSkateHandedOutAt())
+                .skateHandedOutBy(handedOut == null ? null : handedOut.getSkateHandedOutBy())
+                .skateStockDeducted(allStockDeducted)
+                .canHandover((allCashierVerified || allCheckedIn) && !anyHandedOut)
+                .valid(false);
+    }
+
+    private VerificationResultDto verifyTicket(Ticket ticket, String code, String username) {
         VerificationResultDto check = lookupTicket(ticket, code);
         if (!check.isValid()) {
             return check;
         }
+        LocalDateTime now = LocalDateTime.now();
+        if (ticket.getCashierVerifiedAt() == null) {
+            ticket.setCashierVerifiedAt(now);
+            ticket.setCashierVerifiedBy(username);
+        }
         ticket.setIsUsed(true);
+        ticket.setCheckedInAt(now);
+        ticket.setCheckedInBy(username);
         ticketRepository.save(ticket);
+
+        int duration = resolveDuration(ticket.getDurationMinutes(), ticket.getSession());
+        LocalDateTime endsAt = resolveEndsAt(ticket.getSession(), ticket.getEntryTime(), duration, now);
+        boolean active = isOnIce(ticket.getSession(), now, endsAt);
         check.setStatus("CHECKED_IN");
-        check.setMessage("Konki/bilet kodu uğurla təsdiqləndi və istifadə olundu.");
+        check.setValid(true);
+        check.setMessage("Konki/bilet kodu uğurla təsdiqləndi. Bu kod təkrar istifadə edilə bilməz.");
+        check.setCashierVerifiedAt(ticket.getCashierVerifiedAt());
+        check.setCashierVerifiedBy(ticket.getCashierVerifiedBy());
+        check.setCheckedInAt(now);
+        check.setCheckedInBy(username);
+        check.setEndsAt(endsAt);
+        check.setActiveOnIce(active);
+        check.setMinutesRemaining(active ? remainingMinutes(endsAt) : 0);
         return check;
     }
 
     private VerificationResultDto lookupTicket(Ticket ticket, String code) {
         Session session = ticket.getSession();
         User user = ticket.getUser();
+        boolean posTicket = ticket.getSoldByUsername() != null
+                && !ticket.getSoldByUsername().isBlank();
+        String ownerName = posTicket
+                ? (ticket.getCustomerName() == null || ticket.getCustomerName().isBlank()
+                ? "Kassa müştərisi" : ticket.getCustomerName())
+                : fullName(user);
+        String ownerUsername = posTicket ? null : (user == null ? null : user.getUsername());
+        int duration = resolveDuration(ticket.getDurationMinutes(), session);
+        LocalTime entryTime = ticket.getEntryTime();
+        if (entryTime == null && ticket.getPurchaseDate() != null && session != null
+                && session.getSessionDate() != null
+                && ticket.getPurchaseDate().toLocalDate().equals(session.getSessionDate())) {
+            entryTime = ticket.getPurchaseDate().toLocalTime();
+        }
+        if (entryTime == null && session != null) {
+            entryTime = session.getStartTime();
+        }
+        LocalDateTime checkedInAt = ticket.getCheckedInAt();
+        if (checkedInAt == null && Boolean.TRUE.equals(ticket.getIsUsed())) {
+            checkedInAt = ticket.getPurchaseDate();
+        }
+        LocalDateTime endsAt = resolveEndsAt(session, entryTime, duration, checkedInAt);
+        boolean activeOnIce = isOnIce(session, checkedInAt, endsAt);
+        List<VerificationParticipantDto> participants = List.of(
+                VerificationParticipantDto.builder()
+                        .name(ownerName == null ? "Kassa müştərisi" : ownerName)
+                        .build());
+
         VerificationResultDto.VerificationResultDtoBuilder builder = baseBuilder(code)
                 .source("TICKET")
-                .ownerName(fullName(user))
-                .ownerUsername(user == null ? null : user.getUsername())
+                .ownerName(ownerName)
+                .ownerUsername(ownerUsername)
+                .customerName(ownerName)
                 .sessionDate(session == null ? null : session.getSessionDate())
                 .sessionStartTime(session == null ? null : session.getStartTime())
                 .sessionEndTime(session == null ? null : session.getEndTime())
+                .entryTime(entryTime)
+                .durationMinutes(duration)
                 .participantCount(1)
-                .ticketCode(ticket.getTicketCode());
+                .skateSizes(List.of())
+                .participants(participants)
+                .ticketCode(ticket.getTicketCode())
+                .ticketType(ticket.getTicketType() == null ? null : ticket.getTicketType().name())
+                .price(ticket.getPrice())
+                .paymentMethod(ticket.getPaymentMethod() == null
+                        ? null : ticket.getPaymentMethod().name())
+                .purchaseDate(ticket.getPurchaseDate())
+                .soldByUsername(ticket.getSoldByUsername())
+                .saleReference(ticket.getSaleReference())
+                .cashierVerifiedAt(ticket.getCashierVerifiedAt())
+                .cashierVerifiedBy(ticket.getCashierVerifiedBy())
+                .checkedInAt(checkedInAt)
+                .checkedInBy(ticket.getCheckedInBy())
+                .activeOnIce(activeOnIce)
+                .endsAt(endsAt)
+                .minutesRemaining(activeOnIce ? remainingMinutes(endsAt) : 0)
+                .minutesUntilSessionEnd(remainingMinutes(sessionEnd(session)))
+                .canHandover(false);
 
-        if (session != null && session.getSessionDate() != null
-                && session.getSessionDate().isBefore(LocalDate.now())) {
-            return builder.valid(false).status("EXPIRED")
-                    .message("Bu biletin sessiya tarixi keçib.").build();
-        }
         if (Boolean.TRUE.equals(ticket.getIsUsed())) {
             return builder.valid(false).status("ALREADY_USED")
-                    .message("Bu bilet artıq istifadə edilib.").build();
+                    .message("Bu QR bilet istifadə olunub.")
+                    .build();
+        }
+        LocalDateTime sessionEnd = sessionEnd(session);
+        if (sessionEnd != null && !sessionEnd.isAfter(LocalDateTime.now())) {
+            return builder.valid(false).status("EXPIRED")
+                    .message("Bu biletin sessiya vaxtı bitib.").build();
         }
         return builder.valid(true).status("VALID")
-                .message("Bilet etibarlıdır; turniketdən keçirilə bilər.").build();
+                .message("Bilet etibarlıdır; hələ təsdiqlənməyib.").build();
     }
 
-    private Optional<Ticket> findTicket(String code) {
-        Optional<Ticket> byCode = ticketRepository.findByTicketCodeIgnoreCase(code);
-        return byCode.isPresent() ? byCode : ticketRepository.findByQrCodeIgnoreCase(code);
+    private ActiveGuestDto toActiveGuest(VerificationResultDto result, boolean onIce) {
+        return ActiveGuestDto.builder()
+                .source(result.getSource())
+                .code(result.getCode())
+                .ticketCode(result.getTicketCode())
+                .ownerName(result.getOwnerName())
+                .ownerUsername(result.getOwnerUsername())
+                .customerName(result.getCustomerName())
+                .sessionDate(result.getSessionDate())
+                .sessionStartTime(result.getSessionStartTime())
+                .sessionEndTime(result.getSessionEndTime())
+                .entryTime(result.getEntryTime())
+                .durationMinutes(result.getDurationMinutes())
+                .cashierVerifiedAt(result.getCashierVerifiedAt())
+                .cashierVerifiedBy(result.getCashierVerifiedBy())
+                .checkedInAt(result.getCheckedInAt())
+                .checkedInBy(result.getCheckedInBy())
+                .participantCount(result.getParticipantCount())
+                .skateSizes(result.getSkateSizes())
+                .participants(result.getParticipants())
+                .onIce(onIce)
+                .endsAt(result.getEndsAt())
+                .minutesRemaining(result.getMinutesRemaining())
+                .minutesUntilSessionEnd(result.getMinutesUntilSessionEnd())
+                .ticketType(result.getTicketType())
+                .price(result.getPrice())
+                .paymentMethod(result.getPaymentMethod())
+                .purchaseDate(result.getPurchaseDate())
+                .soldByUsername(result.getSoldByUsername())
+                .saleReference(result.getSaleReference())
+                .build();
+    }
+
+    private Payment findPaymentForReservations(List<Reservation> reservations) {
+        if (reservations.isEmpty()) {
+            return null;
+        }
+        Set<String> ids = reservations.stream()
+                .map(Reservation::getId)
+                .filter(id -> id != null)
+                .map(String::valueOf)
+                .collect(Collectors.toSet());
+        if (ids.isEmpty()) {
+            return null;
+        }
+        return paymentRepository.findAll().stream()
+                .filter(payment -> payment.getReservationIds() != null
+                        && !payment.getReservationIds().isBlank())
+                .filter(payment -> Arrays.stream(payment.getReservationIds().split(","))
+                        .map(String::trim)
+                        .anyMatch(ids::contains))
+                .max(Comparator.comparing(Payment::getPaymentDate,
+                        Comparator.nullsFirst(Comparator.naturalOrder())))
+                .orElse(null);
+    }
+
+    private LocalDateTime sessionStart(Session session) {
+        if (session == null || session.getSessionDate() == null
+                || session.getStartTime() == null) {
+            return null;
+        }
+        return LocalDateTime.of(session.getSessionDate(), session.getStartTime());
+    }
+
+    private LocalDateTime sessionEnd(Session session) {
+        if (session == null || session.getSessionDate() == null
+                || session.getEndTime() == null) {
+            return null;
+        }
+        return LocalDateTime.of(session.getSessionDate(), session.getEndTime());
+    }
+
+    private int resolveDuration(Integer durationMinutes, Session session) {
+        if (durationMinutes != null && durationMinutes > 0) {
+            return durationMinutes;
+        }
+        if (session != null && session.getStartTime() != null
+                && session.getEndTime() != null) {
+            long total = Duration.between(session.getStartTime(), session.getEndTime()).toMinutes();
+            if (total > 0) {
+                return (int) Math.min(DEFAULT_DURATION_MINUTES, total);
+            }
+        }
+        return DEFAULT_DURATION_MINUTES;
+    }
+
+    private LocalDateTime resolveEndsAt(Session session, LocalTime entryTime,
+                                         Integer durationMinutes,
+                                         LocalDateTime checkedInAt) {
+        int duration = resolveDuration(durationMinutes, session);
+        if (checkedInAt != null) {
+            return checkedInAt.plusMinutes(duration);
+        }
+        LocalDateTime sessionStart = sessionStart(session);
+        LocalDateTime sessionEnd = sessionEnd(session);
+        LocalDateTime start = null;
+        if (session != null && session.getSessionDate() != null && entryTime != null) {
+            start = LocalDateTime.of(session.getSessionDate(), entryTime);
+        } else {
+            start = sessionStart;
+        }
+        if (start == null) {
+            return sessionEnd;
+        }
+        if (sessionStart != null && start.isBefore(sessionStart)) {
+            start = sessionStart;
+        }
+        LocalDateTime planned = start.plusMinutes(duration);
+        return sessionEnd != null && planned.isAfter(sessionEnd) ? sessionEnd : planned;
+    }
+
+    private boolean isOnIce(Session session, LocalDateTime checkedInAt, LocalDateTime endsAt) {
+        if (checkedInAt == null || endsAt == null) {
+            return false;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        return !now.isBefore(checkedInAt) && endsAt.isAfter(now);
+    }
+
+    private long remainingMinutes(LocalDateTime end) {
+        if (end == null) {
+            return 0;
+        }
+        long seconds = Duration.between(LocalDateTime.now(), end).getSeconds();
+        return seconds <= 0 ? 0 : (seconds + 59) / 60;
+    }
+
+    private Optional<Ticket> findTicket(String code, boolean lock) {
+        Optional<Ticket> byCode = lock
+                ? ticketRepository.findByTicketCodeIgnoreCaseForUpdate(code)
+                : ticketRepository.findByTicketCodeIgnoreCase(code);
+        if (byCode.isPresent()) {
+            return byCode;
+        }
+        return lock
+                ? ticketRepository.findByQrCodeIgnoreCaseForUpdate(code)
+                : ticketRepository.findByQrCodeIgnoreCase(code);
     }
 
     private VerificationResultDto invalid(String code, String message) {

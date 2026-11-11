@@ -30,4 +30,6 @@ public class VolunteerShiftDto {
     private LocalDateTime selectedAt;
     private LocalDateTime assignedAt;
     private String assignedBy;
+    private LocalDateTime cancelledAt;
+    private String cancellationMessage;
 }

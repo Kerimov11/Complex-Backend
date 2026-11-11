@@ -102,6 +102,11 @@ public class CashierPosServiceImpl implements CashierPosService {
         }
         BigDecimal unitPrice = total.divide(BigDecimal.valueOf(quantity), 2, RoundingMode.HALF_UP);
 
+        String reference = "POS-" + UUID.randomUUID().toString()
+                .replace("-", "").substring(0, 10).toUpperCase();
+        String customerName = trimToNull(request.getCustomerName());
+        String customerPhone = trimToNull(request.getCustomerPhone());
+
         List<PosSaleResponse.PosTicketDto> soldTickets = new ArrayList<>();
         for (int i = 0; i < quantity; i++) {
             String code = "POS-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase();
@@ -115,6 +120,10 @@ public class CashierPosServiceImpl implements CashierPosService {
                     .paymentMethod(request.getPaymentMethod())
                     .soldByUsername(cashierUsername)
                     .durationMinutes(duration)
+                    .entryTime(entry)
+                    .customerName(customerName)
+                    .customerPhone(customerPhone)
+                    .saleReference(reference)
                     .user(cashier)
                     .session(session)
                     .build();
@@ -130,8 +139,6 @@ public class CashierPosServiceImpl implements CashierPosService {
         session.setAvailableTickets(available - quantity);
         sessionRepository.save(session);
 
-        String reference = "POS-" + UUID.randomUUID().toString()
-                .replace("-", "").substring(0, 10).toUpperCase();
         Payment payment = Payment.builder()
                 .transactionId(UUID.randomUUID().toString())
                 .reference(reference)
@@ -142,7 +149,7 @@ public class CashierPosServiceImpl implements CashierPosService {
                 .channel(PaymentChannel.POS)
                 .paymentMethod(request.getPaymentMethod())
                 .cashierUsername(cashierUsername)
-                .customerName(trimToNull(request.getCustomerName()))
+                .customerName(customerName)
                 .quantity(quantity)
                 .user(cashier)
                 .build();

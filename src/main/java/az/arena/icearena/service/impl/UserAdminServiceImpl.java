@@ -90,17 +90,21 @@ public class UserAdminServiceImpl implements UserAdminService {
         Set<Role> roles = resolveRoles(request.getRoles());
         roles.add(findRole(RoleName.ROLE_USER));
 
+        String phone = request.getPhoneNumber() != null && !request.getPhoneNumber().isBlank()
+                ? request.getPhoneNumber().trim()
+                : null;
+
         User user = User.builder()
                 .username(request.getUsername().trim())
                 .email(request.getEmail().trim())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .firstName(request.getFirstName().trim())
                 .lastName(request.getLastName().trim())
-                .phoneNumber(request.getPhoneNumber())
+                .phoneNumber(phone)
                 .roles(roles)
                 .build();
 
-        return toDto(userRepository.save(user));
+        return toDto(userRepository.saveAndFlush(user));
     }
 
     @Override
@@ -140,7 +144,7 @@ public class UserAdminServiceImpl implements UserAdminService {
         roles.add(findRole(RoleName.ROLE_USER));
         roles.add(findRole(roleName));
         user.setRoles(roles);
-        return toDto(userRepository.save(user));
+        return toDto(userRepository.saveAndFlush(user));
     }
 
     @Override
