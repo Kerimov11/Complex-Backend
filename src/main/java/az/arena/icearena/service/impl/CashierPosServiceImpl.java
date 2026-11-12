@@ -65,8 +65,27 @@ public class CashierPosServiceImpl implements CashierPosService {
 
         User cashier = userRepository.findByUsername(cashierUsername)
                 .orElseThrow(() -> new ResourceNotFoundException("Kassir tapılmadı."));
-        Session session = sessionRepository.findById(request.getSessionId())
-                .orElseThrow(() -> new ResourceNotFoundException("Sessiya tapılmadı."));
+
+        LocalDateTime now = LocalDateTime.now();
+        Session session;
+        if (request.getSessionId() != null) {
+            session = sessionRepository.findById(request.getSessionId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Sessiya tapılmadı."));
+        } else {
+            List<Session> todaySessions = sessionRepository.findBySessionDate(now.toLocalDate());
+            LocalTime currentTime = now.toLocalTime();
+            session = todaySessions.stream()
+                    .filter(s -> !Boolean.TRUE.equals(s.getBlocked()))
+                    .filter(s -> s.getAvailableTickets() != null && s.getAvailableTickets() >= quantity)
+                    .filter(s -> !currentTime.isAfter(s.getEndTime()))
+                    .min(Comparator.comparing(Session::getStartTime))
+                    .orElseGet(() -> todaySessions.stream()
+                            .filter(s -> !Boolean.TRUE.equals(s.getBlocked()))
+                            .filter(s -> s.getAvailableTickets() != null && s.getAvailableTickets() >= quantity)
+                            .findFirst()
+                            .orElseThrow(() -> new BadRequestException("Hazırda aktiv və ya uyğun açıq sessiya tapılmadı.")));
+        }
+
         if (Boolean.TRUE.equals(session.getBlocked())) {
             throw new BadRequestException(session.getBlockReason() == null
                     ? "Bu sessiya bloklanıb."
@@ -78,7 +97,6 @@ public class CashierPosServiceImpl implements CashierPosService {
         }
 
         int duration = request.getDurationMinutes() == null ? 60 : request.getDurationMinutes();
-        LocalDateTime now = LocalDateTime.now();
         LocalTime entry = resolveEntryTime(session, now);
         SessionAvailabilityDto availability = sessionTimeService.evaluate(
                 session, entry, duration, now);
@@ -104,11 +122,24 @@ public class CashierPosServiceImpl implements CashierPosService {
 
         String reference = "POS-" + UUID.randomUUID().toString()
                 .replace("-", "").substring(0, 10).toUpperCase();
-        String customerName = trimToNull(request.getCustomerName());
+
+        List<String> names = request.getCustomerNames();
+        String primaryCustomerName = trimToNull(request.getCustomerName());
+        if (primaryCustomerName == null && names != null && !names.isEmpty()) {
+            primaryCustomerName = trimToNull(names.get(0));
+        }
         String customerPhone = trimToNull(request.getCustomerPhone());
 
         List<PosSaleResponse.PosTicketDto> soldTickets = new ArrayList<>();
         for (int i = 0; i < quantity; i++) {
+            String ticketPersonName = null;
+            if (names != null && i < names.size()) {
+                ticketPersonName = trimToNull(names.get(i));
+            }
+            if (ticketPersonName == null) {
+                ticketPersonName = primaryCustomerName;
+            }
+
             String code = "POS-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase();
             Ticket ticket = Ticket.builder()
                     .ticketCode(code)
@@ -121,7 +152,7 @@ public class CashierPosServiceImpl implements CashierPosService {
                     .soldByUsername(cashierUsername)
                     .durationMinutes(duration)
                     .entryTime(entry)
-                    .customerName(customerName)
+                    .customerName(ticketPersonName)
                     .customerPhone(customerPhone)
                     .saleReference(reference)
                     .user(cashier)
@@ -133,11 +164,23 @@ public class CashierPosServiceImpl implements CashierPosService {
                     .ticketCode(saved.getTicketCode())
                     .qrCode(saved.getQrCode())
                     .price(saved.getPrice())
+                    .customerName(saved.getCustomerName())
                     .build());
         }
 
         session.setAvailableTickets(available - quantity);
         sessionRepository.save(session);
+
+        String paymentCustomerName = primaryCustomerName;
+        if (names != null && !names.isEmpty()) {
+            List<String> filteredNames = names.stream()
+                    .map(this::trimToNull)
+                    .filter(n -> n != null)
+                    .toList();
+            if (!filteredNames.isEmpty()) {
+                paymentCustomerName = String.join(", ", filteredNames);
+            }
+        }
 
         Payment payment = Payment.builder()
                 .transactionId(UUID.randomUUID().toString())
@@ -149,7 +192,7 @@ public class CashierPosServiceImpl implements CashierPosService {
                 .channel(PaymentChannel.POS)
                 .paymentMethod(request.getPaymentMethod())
                 .cashierUsername(cashierUsername)
-                .customerName(customerName)
+                .customerName(paymentCustomerName)
                 .quantity(quantity)
                 .user(cashier)
                 .build();

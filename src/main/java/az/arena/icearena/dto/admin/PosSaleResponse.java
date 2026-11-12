@@ -34,5 +34,6 @@ public class PosSaleResponse {
         private String ticketCode;
         private String qrCode;
         private BigDecimal price;
+        private String customerName;
     }
 }
