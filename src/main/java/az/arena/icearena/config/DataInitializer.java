@@ -266,8 +266,8 @@ public class DataInitializer {
                 .sessionDate(date)
                 .startTime(start)
                 .endTime(end)
-                .maxTicketLimit(50)
-                .availableTickets(50)
+                .maxTicketLimit(500)
+                .availableTickets(500)
                 .build();
     }
 
