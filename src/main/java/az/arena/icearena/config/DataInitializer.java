@@ -190,6 +190,20 @@ public class DataInitializer {
      */
     private void seedSessions() {
         if (sessionRepository.count() > 0) {
+            List<Session> toUpdate = sessionRepository.findAll().stream()
+                    .filter(s -> s.getMaxTicketLimit() == null || s.getMaxTicketLimit() < 500)
+                    .toList();
+            if (!toUpdate.isEmpty()) {
+                for (Session session : toUpdate) {
+                    int oldLimit = session.getMaxTicketLimit() == null ? 50 : session.getMaxTicketLimit();
+                    int oldAvailable = session.getAvailableTickets() == null ? oldLimit : session.getAvailableTickets();
+                    int sold = Math.max(0, oldLimit - oldAvailable);
+                    session.setMaxTicketLimit(500);
+                    session.setAvailableTickets(Math.max(0, 500 - sold));
+                }
+                sessionRepository.saveAll(toUpdate);
+                log.info("Upgraded {} existing sessions to maxTicketLimit=500", toUpdate.size());
+            }
             return;
         }
 
