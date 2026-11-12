@@ -1,6 +1,7 @@
 package az.arena.icearena.service.impl;
 
 import az.arena.icearena.dto.admin.CreateStaffRequest;
+import az.arena.icearena.dto.admin.UpdateStaffRequest;
 import az.arena.icearena.dto.admin.UserAdminDto;
 import az.arena.icearena.dto.admin.UserRoleUpdateRequest;
 import az.arena.icearena.entity.Role;
@@ -12,12 +13,14 @@ import az.arena.icearena.repository.ReservationRepository;
 import az.arena.icearena.repository.RoleRepository;
 import az.arena.icearena.repository.TicketRepository;
 import az.arena.icearena.repository.UserRepository;
+import az.arena.icearena.repository.VolunteerShiftRepository;
 import az.arena.icearena.service.UserAdminService;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -38,6 +41,7 @@ public class UserAdminServiceImpl implements UserAdminService {
     private final RoleRepository roleRepository;
     private final TicketRepository ticketRepository;
     private final ReservationRepository reservationRepository;
+    private final VolunteerShiftRepository volunteerShiftRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Override
@@ -145,6 +149,94 @@ public class UserAdminServiceImpl implements UserAdminService {
         roles.add(findRole(roleName));
         user.setRoles(roles);
         return toDto(userRepository.saveAndFlush(user));
+    }
+
+    @Override
+    @Transactional
+    public UserAdminDto updateStaffMember(Long id, UpdateStaffRequest request) {
+        User user = findUser(id);
+        boolean isAdmin = user.getRoles().stream()
+                .anyMatch(role -> role.getName() == RoleName.ROLE_ADMIN);
+        if (isAdmin) {
+            throw new BadRequestException("Admin hesabı bu bölmədən redaktə edilə bilməz.");
+        }
+
+        String nextUsername = request.getUsername().trim();
+        if (!nextUsername.equalsIgnoreCase(user.getUsername())
+                && userRepository.existsByUsername(nextUsername)) {
+            throw new BadRequestException("Bu istifadəçi adı artıq mövcuddur.");
+        }
+
+        String nextEmail = request.getEmail().trim();
+        if (!nextEmail.equalsIgnoreCase(user.getEmail())
+                && userRepository.existsByEmail(nextEmail)) {
+            throw new BadRequestException("Bu e-poçt ünvanı artıq istifadə olunur.");
+        }
+
+        user.setFirstName(request.getFirstName().trim());
+        user.setLastName(request.getLastName().trim());
+        user.setUsername(nextUsername);
+        user.setEmail(nextEmail);
+        user.setPhoneNumber(request.getPhoneNumber() != null && !request.getPhoneNumber().isBlank()
+                ? request.getPhoneNumber().trim()
+                : null);
+
+        if (request.getPassword() != null && !request.getPassword().isBlank()) {
+            if (request.getPassword().trim().length() < 6) {
+                throw new BadRequestException("Şifrə ən azı 6 simvol olmalıdır.");
+            }
+            user.setPassword(passwordEncoder.encode(request.getPassword().trim()));
+        }
+
+        if (request.getRole() != null) {
+            if (!STAFF_ROLES.contains(request.getRole())) {
+                throw new BadRequestException("Yalnız VOLUNTEER, CASHIER və COORDINATOR rolları seçilə bilər.");
+            }
+            Set<Role> roles = new HashSet<>();
+            roles.add(findRole(RoleName.ROLE_USER));
+            roles.add(findRole(request.getRole()));
+            user.setRoles(roles);
+        }
+
+        return toDto(userRepository.saveAndFlush(user));
+    }
+
+    @Override
+    @Transactional
+    public void deleteStaffMember(Long id, String actorUsername) {
+        User user = findUser(id);
+        boolean isAdmin = user.getRoles().stream()
+                .anyMatch(role -> role.getName() == RoleName.ROLE_ADMIN);
+        if (isAdmin || isSelf(user, actorUsername)) {
+            throw new BadRequestException("Admin hesabı silinə bilməz.");
+        }
+
+        var shifts = volunteerShiftRepository.findByUserIdOrderBySelectedAtDesc(id);
+        if (!shifts.isEmpty()) {
+            volunteerShiftRepository.deleteAll(shifts);
+            volunteerShiftRepository.flush();
+        }
+
+        boolean hasHistory = !ticketRepository.findByUserId(id).isEmpty()
+                || !reservationRepository.findByUserId(id).isEmpty()
+                || (user.getPayments() != null && !user.getPayments().isEmpty())
+                || (user.getSkateRentals() != null && !user.getSkateRentals().isEmpty());
+
+        if (!hasHistory) {
+            user.getRoles().clear();
+            userRepository.saveAndFlush(user);
+            userRepository.delete(user);
+            userRepository.flush();
+        } else {
+            user.getRoles().clear();
+            String suffix = "_del_" + id + "_" + (System.currentTimeMillis() % 10000);
+            String oldUsername = user.getUsername() == null ? "user" : user.getUsername();
+            user.setUsername(oldUsername.substring(0, Math.min(oldUsername.length(), 30)) + suffix);
+            String oldEmail = user.getEmail() == null ? "deleted@local" : user.getEmail();
+            user.setEmail(oldEmail.substring(0, Math.min(oldEmail.length(), 35)) + suffix);
+            user.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
+            userRepository.saveAndFlush(user);
+        }
     }
 
     @Override

@@ -1,6 +1,7 @@
 package az.arena.icearena.service;
 
 import az.arena.icearena.dto.admin.CreateStaffRequest;
+import az.arena.icearena.dto.admin.UpdateStaffRequest;
 import az.arena.icearena.dto.admin.UserAdminDto;
 import az.arena.icearena.dto.admin.UserRoleUpdateRequest;
 import az.arena.icearena.entity.RoleName;
@@ -18,6 +19,10 @@ public interface UserAdminService {
     UserAdminDto createStaffMember(CreateStaffRequest request);
 
     UserAdminDto updateStaffRole(Long id, RoleName roleName);
+
+    UserAdminDto updateStaffMember(Long id, UpdateStaffRequest request);
+
+    void deleteStaffMember(Long id, String actorUsername);
 
     UserAdminDto updateRoles(Long id, UserRoleUpdateRequest request, String actorUsername);
 

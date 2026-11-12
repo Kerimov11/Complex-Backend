@@ -2,13 +2,16 @@ package az.arena.icearena.controller.admin;
 
 import az.arena.icearena.dto.admin.CreateStaffRequest;
 import az.arena.icearena.dto.admin.StaffRoleUpdateRequest;
+import az.arena.icearena.dto.admin.UpdateStaffRequest;
 import az.arena.icearena.dto.admin.UserAdminDto;
 import az.arena.icearena.service.UserAdminService;
 import jakarta.validation.Valid;
+import java.security.Principal;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -42,5 +45,21 @@ public class UserAdminController {
             @PathVariable Long id,
             @Valid @RequestBody StaffRoleUpdateRequest request) {
         return ResponseEntity.ok(userAdminService.updateStaffRole(id, request.getRole()));
+    }
+
+    @PutMapping("/staff/{id}")
+    public ResponseEntity<UserAdminDto> updateStaffMember(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateStaffRequest request) {
+        return ResponseEntity.ok(userAdminService.updateStaffMember(id, request));
+    }
+
+    @DeleteMapping("/staff/{id}")
+    public ResponseEntity<Void> deleteStaffMember(
+            @PathVariable Long id,
+            Principal principal) {
+        String actorUsername = principal == null ? null : principal.getName();
+        userAdminService.deleteStaffMember(id, actorUsername);
+        return ResponseEntity.noContent().build();
     }
 }
