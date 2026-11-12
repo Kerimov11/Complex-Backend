@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/shifts")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR', 'CASHIER')")
+@PreAuthorize("hasAnyRole('ADMIN', 'COORDINATOR')")
 public class ShiftOverviewController {
 
     private final ShiftOverviewService shiftOverviewService;
