@@ -142,22 +142,30 @@ public class CashierPosServiceImpl implements CashierPosService {
         String reference = "POS-" + UUID.randomUUID().toString()
                 .replace("-", "").substring(0, 10).toUpperCase();
 
-        List<String> names = request.getCustomerNames();
-        String primaryCustomerName = trimToNull(request.getCustomerName());
-        if (primaryCustomerName == null && names != null && !names.isEmpty()) {
-            primaryCustomerName = trimToNull(names.get(0));
-        }
+        // 1. Mobil nömrə validasiyası
         String customerPhone = trimToNull(request.getCustomerPhone());
+        if (customerPhone == null || !isValidPhone(customerPhone)) {
+            throw new BadRequestException("Mobil nömrə düzgün formatda deyil (məs: +994 50 123 45 67).");
+        }
+
+        // 2. Bütün biletlər üçün ad və soyad validasiyası
+        List<String> names = request.getCustomerNames();
+        if (names == null || names.size() < quantity) {
+            throw new BadRequestException("Bütün " + quantity + " bilet üçün ad və soyad tələb olunur.");
+        }
+        for (int i = 0; i < quantity; i++) {
+            String name = (i < names.size()) ? trimToNull(names.get(i)) : null;
+            if (name == null || !isValidFullName(name)) {
+                String prefix = quantity > 1 ? (i + 1) + "-ci qonağın" : "Qonağın";
+                throw new BadRequestException(prefix + " həm adı, həm də soyadı tam qeyd olunmalıdır (məs: Əli Əliyev).");
+            }
+        }
+
+        String primaryCustomerName = trimToNull(names.get(0));
 
         List<PosSaleResponse.PosTicketDto> soldTickets = new ArrayList<>();
         for (int i = 0; i < quantity; i++) {
-            String ticketPersonName = null;
-            if (names != null && i < names.size()) {
-                ticketPersonName = trimToNull(names.get(i));
-            }
-            if (ticketPersonName == null) {
-                ticketPersonName = primaryCustomerName;
-            }
+            String ticketPersonName = trimToNull(names.get(i));
 
             String code = "POS-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase();
             Ticket ticket = Ticket.builder()
@@ -306,6 +314,31 @@ public class CashierPosServiceImpl implements CashierPosService {
             return now.toLocalTime();
         }
         return session.getStartTime();
+    }
+
+    private boolean isValidPhone(String phone) {
+        if (phone == null || phone.isBlank()) {
+            return false;
+        }
+        String digits = phone.replaceAll("\\D", "");
+        if (digits.length() == 12 && digits.startsWith("994")) {
+            return digits.matches("^994(10|50|51|55|60|70|71|77|99)\\d{7}$");
+        }
+        if (digits.length() == 10 && digits.startsWith("0")) {
+            return digits.matches("^0(10|50|51|55|60|70|71|77|99)\\d{7}$");
+        }
+        if (digits.length() == 9) {
+            return digits.matches("^(10|50|51|55|60|70|71|77|99)\\d{7}$");
+        }
+        return phone.startsWith("+") && digits.length() >= 10 && digits.length() <= 15;
+    }
+
+    private boolean isValidFullName(String fullName) {
+        if (fullName == null || fullName.isBlank()) {
+            return false;
+        }
+        String[] parts = fullName.trim().split("\\s+");
+        return parts.length >= 2 && parts[0].length() >= 2 && parts[1].length() >= 2;
     }
 
     private String trimToNull(String value) {
