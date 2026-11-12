@@ -67,23 +67,50 @@ public class CashierPosServiceImpl implements CashierPosService {
                 .orElseThrow(() -> new ResourceNotFoundException("Kassir tapılmadı."));
 
         LocalDateTime now = LocalDateTime.now();
-        Session session;
+        Session session = null;
         if (request.getSessionId() != null) {
-            session = sessionRepository.findById(request.getSessionId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Sessiya tapılmadı."));
-        } else {
-            List<Session> todaySessions = sessionRepository.findBySessionDate(now.toLocalDate());
-            LocalTime currentTime = now.toLocalTime();
+            session = sessionRepository.findById(request.getSessionId()).orElse(null);
+        }
+
+        List<Session> todaySessions = sessionRepository.findBySessionDate(now.toLocalDate());
+        LocalTime currentTime = now.toLocalTime();
+
+        if (session == null || Boolean.TRUE.equals(session.getBlocked())) {
+            // 1. Cari aktiv sessiya (başlama və bitmə saatı aralığında)
             session = todaySessions.stream()
                     .filter(s -> !Boolean.TRUE.equals(s.getBlocked()))
                     .filter(s -> s.getAvailableTickets() != null && s.getAvailableTickets() >= quantity)
-                    .filter(s -> !currentTime.isAfter(s.getEndTime()))
-                    .min(Comparator.comparing(Session::getStartTime))
-                    .orElseGet(() -> todaySessions.stream()
-                            .filter(s -> !Boolean.TRUE.equals(s.getBlocked()))
-                            .filter(s -> s.getAvailableTickets() != null && s.getAvailableTickets() >= quantity)
-                            .findFirst()
-                            .orElseThrow(() -> new BadRequestException("Hazırda aktiv və ya uyğun açıq sessiya tapılmadı.")));
+                    .filter(s -> !currentTime.isBefore(s.getStartTime()) && !currentTime.isAfter(s.getEndTime()))
+                    .findFirst()
+                    .orElse(null);
+
+            // 2. Qarşıdakı növbəti sessiya
+            if (session == null) {
+                session = todaySessions.stream()
+                        .filter(s -> !Boolean.TRUE.equals(s.getBlocked()))
+                        .filter(s -> s.getAvailableTickets() != null && s.getAvailableTickets() >= quantity)
+                        .filter(s -> currentTime.isBefore(s.getStartTime()))
+                        .min(Comparator.comparing(Session::getStartTime))
+                        .orElse(null);
+            }
+
+            // 3. Ən sonuncu mövcud sessiya
+            if (session == null) {
+                session = todaySessions.stream()
+                        .filter(s -> !Boolean.TRUE.equals(s.getBlocked()))
+                        .filter(s -> s.getAvailableTickets() != null && s.getAvailableTickets() >= quantity)
+                        .max(Comparator.comparing(Session::getStartTime))
+                        .orElse(null);
+            }
+
+            // 4. Günün istənilən sessiyası
+            if (session == null && !todaySessions.isEmpty()) {
+                session = todaySessions.get(todaySessions.size() - 1);
+            }
+        }
+
+        if (session == null) {
+            throw new BadRequestException("Hazırda aktiv və ya uyğun açıq sessiya tapılmadı.");
         }
 
         if (Boolean.TRUE.equals(session.getBlocked())) {
@@ -98,14 +125,6 @@ public class CashierPosServiceImpl implements CashierPosService {
 
         int duration = request.getDurationMinutes() == null ? 60 : request.getDurationMinutes();
         LocalTime entry = resolveEntryTime(session, now);
-        SessionAvailabilityDto availability = sessionTimeService.evaluate(
-                session, entry, duration, now);
-        if (!Boolean.TRUE.equals(availability.getSalesOpen())) {
-            throw new BadRequestException(availability.getMessage());
-        }
-        if (!Boolean.TRUE.equals(availability.getRequestedDurationAvailable())) {
-            throw new BadRequestException("Seçilmiş bilet müddəti bu sessiya üçün mövcud deyil.");
-        }
 
         DiscountBreakdownDto pricing = discountService.calculate(DiscountRequest.builder()
                 .sessionId(session.getId())
