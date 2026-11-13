@@ -30,6 +30,9 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
     private static final int MAX_AGE = 120;
     private static final Pattern DOCUMENT_PATTERN = Pattern.compile("^[A-Z0-9]{5,30}$");
     private static final Pattern FIN_PATTERN = Pattern.compile("^[A-Z0-9]{7}$");
+    private static final Pattern PUSH30_PHONE_PATTERN =
+            Pattern.compile("^994(10|50|51|55|60|70|77|99)\\d{7}$");
+    private static final Pattern REPEATED_DIGITS_PATTERN = Pattern.compile("^(\\d)\\1{6}$");
     private static final int MAX_PHOTO_DATA_LENGTH = 6_000_000;
     private static final Set<RoleName> STAFF_ROLES = Set.of(
             RoleName.ROLE_ADMIN,
@@ -151,8 +154,8 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
                 ? "" : request.getFamilyIdsPhotoData().trim();
         String push30Photo = request.getPush30ScreenshotData() == null
                 ? "" : request.getPush30ScreenshotData().trim();
-        String push30Phone = request.getPush30Phone() == null
-                ? "" : request.getPush30Phone().replaceAll("[^0-9]", "");
+        String push30Phone = request.getPush30Phone() == null || request.getPush30Phone().isBlank()
+                ? "" : normalizeAndValidatePush30Phone(request.getPush30Phone(), true);
         String qaziPhoto = request.getQaziDocumentPhotoData() == null
                 ? "" : request.getQaziDocumentPhotoData().trim();
         String qaziFullName = request.getQaziFullName() == null
@@ -225,10 +228,16 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
             } else if (Boolean.TRUE.equals(match.getStudentDiscountApplied())) {
                 reservation.setStudentDiscountApplied(true);
             }
+            if (anyPhotoSubmitted) {
+                reservation.setReviewStatus("PENDING_REVIEW");
+                reservation.setReviewReason(null);
+                reservation.setReviewedAt(null);
+                reservation.setReviewedBy(null);
+            }
             reservationRepository.save(reservation);
         }
 
-        if (anyPhotoSubmitted) {
+        if (anyPhotoSubmitted && !"APPROVED".equals(user.getIdentityReviewStatus())) {
             user.setIdentityReviewStatus("PENDING_REVIEW");
             user.setIdentityReviewedAt(null);
             user.setIdentityReviewedBy(null);
@@ -241,12 +250,41 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
     @Override
     @Transactional(readOnly = true)
     public boolean isPush30PhoneUsed(String phone) {
-        String normalized = phone == null ? "" : phone.replaceAll("[^0-9]", "");
-        if (normalized.length() < 9) {
+        String normalized = normalizeAndValidatePush30Phone(phone, false);
+        if (normalized.isEmpty()) {
             return false;
         }
         return reservationRepository.existsByPush30PhoneAndStatusNot(
                 normalized, Reservation.Status.CANCELLED);
+    }
+
+    private String normalizeAndValidatePush30Phone(String raw, boolean strict) {
+        String digits = raw == null ? "" : raw.replaceAll("[^0-9]", "");
+        if (digits.isEmpty()) {
+            return "";
+        }
+        if (digits.length() == 10 && digits.startsWith("0")) {
+            digits = "994" + digits.substring(1);
+        } else if (digits.length() == 9) {
+            digits = "994" + digits;
+        }
+        boolean validPattern = PUSH30_PHONE_PATTERN.matcher(digits).matches();
+        boolean dummyNumber = false;
+        if (validPattern) {
+            String subscriber = digits.substring(5);
+            dummyNumber = REPEATED_DIGITS_PATTERN.matcher(subscriber).matches()
+                    || "1234567".equals(subscriber)
+                    || "0123456".equals(subscriber)
+                    || "7654321".equals(subscriber);
+        }
+        if (!validPattern || dummyNumber) {
+            if (strict) {
+                throw new BadRequestException(
+                        "PUSH30 nömrəsi düzgün Azərbaycan mobil nömrəsi olmalıdır (məs: +994 50 123 45 67).");
+            }
+            return "";
+        }
+        return digits;
     }
 
     @Override

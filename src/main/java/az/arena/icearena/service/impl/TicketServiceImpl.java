@@ -232,9 +232,25 @@ public class TicketServiceImpl implements TicketService {
             statusLabel = "Aktiv";
         }
 
-        String identityReviewStatus = first.getUser() != null ? first.getUser().getIdentityReviewStatus() : null;
-        boolean identityBlocked = "PENDING_REVIEW".equals(identityReviewStatus)
-                || "REJECTED".equals(identityReviewStatus);
+        String userReviewStatus = first.getUser() != null ? first.getUser().getIdentityReviewStatus() : null;
+        String ticketReviewStatus = first.getReviewStatus();
+        String effectiveReviewStatus;
+        String effectiveRejectionReason = null;
+        if ("REJECTED".equals(ticketReviewStatus)) {
+            effectiveReviewStatus = "REJECTED";
+            effectiveRejectionReason = first.getReviewReason();
+        } else if ("REJECTED".equals(userReviewStatus)) {
+            effectiveReviewStatus = "REJECTED";
+            effectiveRejectionReason = first.getUser().getIdentityRejectionReason();
+        } else if ("PENDING_REVIEW".equals(ticketReviewStatus) || "PENDING_REVIEW".equals(userReviewStatus)) {
+            effectiveReviewStatus = "PENDING_REVIEW";
+        } else if ("APPROVED".equals(ticketReviewStatus) || "APPROVED".equals(userReviewStatus)) {
+            effectiveReviewStatus = "APPROVED";
+        } else {
+            effectiveReviewStatus = null;
+        }
+        boolean identityBlocked = "PENDING_REVIEW".equals(effectiveReviewStatus)
+                || "REJECTED".equals(effectiveReviewStatus);
 
         boolean canActivate = allConfirmed
                 && !anyCheckedIn
@@ -310,8 +326,8 @@ public class TicketServiceImpl implements TicketService {
                 .checkedOutAt(checkedOutAt)
                 .iceEntryTime(iceEntryTime)
                 .iceExitTime(iceExitTime)
-                .identityReviewStatus(first.getUser() != null ? first.getUser().getIdentityReviewStatus() : null)
-                .identityRejectionReason(first.getUser() != null ? first.getUser().getIdentityRejectionReason() : null)
+                .identityReviewStatus(effectiveReviewStatus)
+                .identityRejectionReason(effectiveRejectionReason)
                 .build();
     }
 

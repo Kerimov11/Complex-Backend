@@ -44,12 +44,133 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
     @Transactional(readOnly = true)
     public List<IdentityVerificationAdminDto> list(String status) {
         String normalized = status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
-        List<User> users = normalized.isEmpty() || "ALL".equals(normalized)
+        boolean isAll = normalized.isEmpty() || "ALL".equals(normalized);
+
+        List<User> users = isAll
                 ? userRepository.findByIdentityReviewStatusIsNotNullOrderByIdentityConfirmedAtDesc()
                 : userRepository.findByIdentityReviewStatusOrderByIdentityConfirmedAtDesc(normalized);
-        return users.stream()
-                .map(this::toDto)
-                .toList();
+
+        List<Reservation> ticketReservations = isAll
+                ? reservationRepository.findByReviewStatusIsNotNullOrderByCreatedAtDesc()
+                : reservationRepository.findByReviewStatusOrderByCreatedAtDesc(normalized);
+
+        Map<String, List<Reservation>> groupedTickets = new LinkedHashMap<>();
+        for (Reservation r : ticketReservations) {
+            String code = r.getVoucherCode();
+            if (code == null || code.isBlank()) {
+                code = "RES-" + r.getId();
+            }
+            groupedTickets.computeIfAbsent(code, k -> new ArrayList<>()).add(r);
+        }
+
+        List<IdentityVerificationAdminDto> result = new ArrayList<>();
+        for (Map.Entry<String, List<Reservation>> entry : groupedTickets.entrySet()) {
+            result.add(toTicketReviewDto(entry.getKey(), entry.getValue()));
+        }
+        for (User user : users) {
+            result.add(toDto(user));
+        }
+
+        result.sort(Comparator.comparing(
+                (IdentityVerificationAdminDto dto) -> {
+                    if (dto.getTicket() != null && dto.getTicket().getPurchaseDate() != null) {
+                        return dto.getTicket().getPurchaseDate();
+                    }
+                    return dto.getIdentityConfirmedAt();
+                },
+                Comparator.nullsLast(Comparator.reverseOrder())
+        ));
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public IdentityVerificationAdminDto approveTicket(String ticketCode, String reviewerUsername) {
+        List<Reservation> group = reservationRepository.findByVoucherCodeIgnoreCase(ticketCode);
+        if (group.isEmpty()) {
+            throw new ResourceNotFoundException("Bilet tapılmadı: " + ticketCode);
+        }
+        LocalDateTime now = LocalDateTime.now();
+        for (Reservation r : group) {
+            r.setReviewStatus("APPROVED");
+            r.setReviewedAt(now);
+            r.setReviewedBy(reviewerUsername);
+            r.setReviewReason(null);
+        }
+        reservationRepository.saveAll(group);
+        return toTicketReviewDto(ticketCode, group);
+    }
+
+    @Override
+    @Transactional
+    public IdentityVerificationAdminDto rejectTicket(String ticketCode, String reason, String reviewerUsername) {
+        List<Reservation> group = reservationRepository.findByVoucherCodeIgnoreCase(ticketCode);
+        if (group.isEmpty()) {
+            throw new ResourceNotFoundException("Bilet tapılmadı: " + ticketCode);
+        }
+        String cleanedReason = reason == null || reason.isBlank()
+                ? "Təqdim olunan sənəd və ya foto məlumatları qaydalara uyğun deyil."
+                : reason.trim();
+        LocalDateTime now = LocalDateTime.now();
+        Set<Long> cancelledIds = new HashSet<>();
+        Long userId = null;
+
+        for (Reservation reservation : group) {
+            if (reservation.getUser() != null) {
+                userId = reservation.getUser().getId();
+            }
+            reservation.setReviewStatus("REJECTED");
+            reservation.setReviewedAt(now);
+            reservation.setReviewedBy(reviewerUsername);
+            reservation.setReviewReason(cleanedReason);
+
+            if (reservation.getCheckedInAt() == null
+                    && reservation.getStatus() != Reservation.Status.CANCELLED) {
+                reservation.setStatus(Reservation.Status.CANCELLED);
+                if (Boolean.TRUE.equals(reservation.getSkateStockDeducted())
+                        && reservation.getSkateHandedOutAt() == null
+                        && reservation.getSkate() != null) {
+                    Skate skate = reservation.getSkate();
+                    int avail = skate.getAvailableQuantity() == null ? 0 : skate.getAvailableQuantity();
+                    skate.setAvailableQuantity(avail + 1);
+                    skateRepository.save(skate);
+                    reservation.setSkateStockDeducted(false);
+                    reservation.setTimerExpiresAt(null);
+                }
+                if (reservation.getSession() != null) {
+                    Session session = reservation.getSession();
+                    int max = session.getMaxTicketLimit() == null ? Integer.MAX_VALUE : session.getMaxTicketLimit();
+                    int avail = session.getAvailableTickets() == null ? 0 : session.getAvailableTickets();
+                    session.setAvailableTickets(Math.min(max, avail + 1));
+                    sessionRepository.save(session);
+                }
+                if (reservation.getId() != null) {
+                    cancelledIds.add(reservation.getId());
+                }
+            }
+            reservationRepository.save(reservation);
+        }
+
+        BigDecimal refunded = BigDecimal.ZERO;
+        if (!cancelledIds.isEmpty() && userId != null) {
+            List<Payment> payments = paymentRepository.findByUserId(userId);
+            for (Payment payment : payments) {
+                if (payment.getStatus() != PaymentStatus.SUCCESS) {
+                    continue;
+                }
+                if (matchesAnyReservation(payment.getReservationIds(), cancelledIds)) {
+                    payment.setStatus(PaymentStatus.REFUNDED);
+                    paymentRepository.save(payment);
+                    if (payment.getAmount() != null) {
+                        refunded = refunded.add(payment.getAmount());
+                    }
+                }
+            }
+        }
+
+        IdentityVerificationAdminDto dto = toTicketReviewDto(ticketCode, group);
+        dto.setRefundedAmount(refunded.compareTo(BigDecimal.ZERO) > 0 ? refunded : null);
+        return dto;
     }
 
     @Override
@@ -172,6 +293,11 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
 
         return IdentityVerificationAdminDto.builder()
                 .userId(user.getId())
+                .itemType("USER_IDENTITY")
+                .reviewStatus(user.getIdentityReviewStatus())
+                .reviewReason(user.getIdentityRejectionReason())
+                .reviewedAt(user.getIdentityReviewedAt())
+                .reviewedBy(user.getIdentityReviewedBy())
                 .username(user.getUsername())
                 .fullName(fullName)
                 .email(user.getEmail())
@@ -230,6 +356,48 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
                 .qaziFullName(first.getQaziFullName())
                 .shaheedDocumentPhotoData(first.getShaheedDocumentPhotoData())
                 .participantPhotos(participantPhotos)
+                .build();
+    }
+
+    private IdentityVerificationAdminDto toTicketReviewDto(String code, List<Reservation> group) {
+        Reservation first = group.get(0);
+        User user = first.getUser();
+        String firstName = user != null && user.getFirstName() != null ? user.getFirstName().trim() : "";
+        String lastName = user != null && user.getLastName() != null ? user.getLastName().trim() : "";
+        String accountFullName = (firstName + " " + lastName).trim();
+        if (accountFullName.isEmpty() && user != null) {
+            accountFullName = user.getUsername();
+        }
+
+        List<String> participantNames = group.stream()
+                .map(Reservation::getParticipantName)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .distinct()
+                .toList();
+
+        IdentityVerificationAdminDto.TicketSummary summary = toTicketSummary(code, group);
+        return IdentityVerificationAdminDto.builder()
+                .userId(user != null ? user.getId() : null)
+                .itemType("TICKET")
+                .ticketCode(code)
+                .discountType(first.getDiscountType())
+                .reviewStatus(first.getReviewStatus())
+                .reviewReason(first.getReviewReason())
+                .reviewedAt(first.getReviewedAt())
+                .reviewedBy(first.getReviewedBy())
+                .participantNames(participantNames)
+                .ticket(summary)
+                .username(user != null ? user.getUsername() : null)
+                .fullName(accountFullName)
+                .email(user != null ? user.getEmail() : null)
+                .phoneNumber(user != null ? user.getPhoneNumber() : null)
+                .dateOfBirth(user != null ? user.getDateOfBirth() : null)
+                .identityDocumentNumber(user != null ? user.getIdentityDocumentNumber() : null)
+                .finCode(user != null ? user.getFinCode() : null)
+                .identityReviewStatus(user != null ? user.getIdentityReviewStatus() : null)
+                .identityConfirmedAt(user != null ? user.getIdentityConfirmedAt() : null)
                 .build();
     }
 }

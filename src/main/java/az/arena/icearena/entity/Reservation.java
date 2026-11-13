@@ -133,6 +133,20 @@ public class Reservation {
     @Column(length = 50)
     private String skateHandedOutBy;
 
+    @Column(length = 40)
+    private String discountType;
+
+    @Column(length = 30)
+    private String reviewStatus;
+
+    @Column(length = 500)
+    private String reviewReason;
+
+    @Column(length = 100)
+    private String reviewedBy;
+
+    private LocalDateTime reviewedAt;
+
     /** Köhnə frontend/API uyğunluğu üçün. */
     @Deprecated
     public Integer getExtensionCount() {

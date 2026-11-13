@@ -1,6 +1,7 @@
 package az.arena.icearena.service.impl;
 
 import az.arena.icearena.dto.BookingPaymentRequest;
+import az.arena.icearena.dto.DiscountBreakdownDto;
 import az.arena.icearena.dto.DiscountRequest;
 import az.arena.icearena.entity.Payment;
 import az.arena.icearena.entity.PaymentStatus;
@@ -240,11 +241,25 @@ public class PaymentServiceImpl implements PaymentService {
                 .shaheedVerified(request.getShaheedVerified())
                 .build();
 
-        BigDecimal expected = discountService.calculate(pricingRequest).getFinalPrice();
+        DiscountBreakdownDto discountResult = discountService.calculate(pricingRequest);
+        BigDecimal expected = discountResult.getFinalPrice();
         if (request.getAmount() == null || request.getAmount().compareTo(expected) != 0) {
             throw new BadRequestException(
                     "Ödəniş məbləği server hesablaması ilə uyğun deyil. Gözlənilən: "
                             + expected.toPlainString() + " AZN.");
+        }
+        String appliedType = discountResult.getAppliedDiscountType();
+        if (appliedType != null && !appliedType.isBlank()) {
+            boolean needsCashierReview = java.util.Set.of(
+                    "STUDENT", "FAMILY", "PUSH30", "QAZI", "SHAHEED"
+            ).contains(appliedType);
+            for (Reservation r : reservations) {
+                r.setDiscountType(appliedType);
+                if (needsCashierReview) {
+                    r.setReviewStatus("PENDING_REVIEW");
+                }
+            }
+            reservationRepository.saveAll(reservations);
         }
         return expected;
     }

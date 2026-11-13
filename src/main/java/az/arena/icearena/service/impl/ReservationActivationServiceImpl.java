@@ -88,6 +88,15 @@ public class ReservationActivationServiceImpl implements ReservationActivationSe
         LocalDateTime now = LocalDateTime.now();
 
         for (Reservation reservation : reservations) {
+            String ticketReviewStatus = reservation.getReviewStatus();
+            if ("PENDING_REVIEW".equals(ticketReviewStatus)) {
+                throw new BadRequestException(
+                        "Biletiniz hələ kassir tərəfindən təsdiqlənməyib. Təsdiqdən sonra konki rezervasiyası edə bilərsiniz.");
+            }
+            if ("REJECTED".equals(ticketReviewStatus)) {
+                throw new BadRequestException(
+                        "Bu biletin təsdiqi rədd edilib.");
+            }
             if (reservation.getUser() != null) {
                 String reviewStatus = reservation.getUser().getIdentityReviewStatus();
                 if ("PENDING_REVIEW".equals(reviewStatus)) {

@@ -44,6 +44,10 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
     List<Reservation> findByStatusInAndSessionSessionDateGreaterThanEqualOrderBySessionSessionDateAscSessionStartTimeAscIdAsc(
             Collection<Reservation.Status> statuses, LocalDate date);
 
+    List<Reservation> findByReviewStatusOrderByCreatedAtDesc(String reviewStatus);
+
+    List<Reservation> findByReviewStatusIsNotNullOrderByCreatedAtDesc();
+
     List<Reservation> findBySkateStockDeductedTrueAndSkateHandedOutAtIsNullAndTimerExpiresAtBefore(
             LocalDateTime now);
 

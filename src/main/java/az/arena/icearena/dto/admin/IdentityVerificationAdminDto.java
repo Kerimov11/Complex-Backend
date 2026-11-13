@@ -17,6 +17,16 @@ import lombok.NoArgsConstructor;
 public class IdentityVerificationAdminDto {
 
     private Long userId;
+    private String itemType;
+    private String ticketCode;
+    private String discountType;
+    private String reviewStatus;
+    private String reviewReason;
+    private LocalDateTime reviewedAt;
+    private String reviewedBy;
+    @Builder.Default
+    private List<String> participantNames = new ArrayList<>();
+    private TicketSummary ticket;
     private String username;
     private String fullName;
     private String email;

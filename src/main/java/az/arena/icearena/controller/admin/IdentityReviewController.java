@@ -45,4 +45,20 @@ public class IdentityReviewController {
         String reason = request == null ? null : request.getReason();
         return ResponseEntity.ok(identityReviewService.reject(userId, reason, principal.getName()));
     }
+
+    @PostMapping("/tickets/{ticketCode}/approve")
+    public ResponseEntity<IdentityVerificationAdminDto> approveTicket(
+            @PathVariable String ticketCode,
+            Principal principal) {
+        return ResponseEntity.ok(identityReviewService.approveTicket(ticketCode, principal.getName()));
+    }
+
+    @PostMapping("/tickets/{ticketCode}/reject")
+    public ResponseEntity<IdentityVerificationAdminDto> rejectTicket(
+            @PathVariable String ticketCode,
+            @RequestBody(required = false) IdentityRejectRequest request,
+            Principal principal) {
+        String reason = request == null ? null : request.getReason();
+        return ResponseEntity.ok(identityReviewService.rejectTicket(ticketCode, reason, principal.getName()));
+    }
 }

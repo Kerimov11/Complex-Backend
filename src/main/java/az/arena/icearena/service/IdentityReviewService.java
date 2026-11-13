@@ -10,4 +10,8 @@ public interface IdentityReviewService {
     IdentityVerificationAdminDto approve(Long userId, String reviewerUsername);
 
     IdentityVerificationAdminDto reject(Long userId, String reason, String reviewerUsername);
+
+    IdentityVerificationAdminDto approveTicket(String ticketCode, String reviewerUsername);
+
+    IdentityVerificationAdminDto rejectTicket(String ticketCode, String reason, String reviewerUsername);
 }
