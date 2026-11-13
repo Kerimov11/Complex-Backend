@@ -58,6 +58,8 @@ class CustomerVerificationServiceTest {
         CustomerVerificationDto identityResult = verificationService.saveIdentity(
                 user.getUsername(),
                 "AA 1234567",
+                "5ABC123",
+                "data:image/jpeg;base64," + "A".repeat(120),
                 true);
         assertTrue(identityResult.getIdentityConfirmed());
         assertEquals("4567", identityResult.getIdentityDocumentLast4());
@@ -75,6 +77,8 @@ class CustomerVerificationServiceTest {
                 () -> verificationService.saveIdentity(
                         user.getUsername(),
                         "AA1234567",
+                        "5ABC123",
+                        "data:image/jpeg;base64," + "A".repeat(120),
                         true));
     }
 

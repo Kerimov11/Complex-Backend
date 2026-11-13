@@ -79,6 +79,7 @@ class VerificationServiceTest {
         assertEquals("NOT_CHECKED_IN", beforeScan.getStatus());
         assertEquals(10, available(skate));
 
+        verificationService.lookup(voucher, "cashier");
         VerificationResultDto scanned = verificationService.verify(voucher, "volunteer");
         assertTrue(scanned.isValid());
         assertEquals("CHECKED_IN", scanned.getStatus());
@@ -155,6 +156,7 @@ class VerificationServiceTest {
         // Handover əvvəlcə vaxtı keçmiş aktivasiyanın stokunu geri qaytarır.
         assertEquals(5, available(skate));
 
+        verificationService.lookup(voucher, "cashier");
         VerificationResultDto scanned = verificationService.verify(voucher, "volunteer");
         assertTrue(scanned.isValid());
         assertEquals("CHECKED_IN", scanned.getStatus());
@@ -202,6 +204,7 @@ class VerificationServiceTest {
                 reservation(user, session, outOfStock, voucher, "Stok Yox", 20)
         ));
 
+        verificationService.lookup(voucher, "cashier");
         VerificationResultDto scanned = verificationService.verify(voucher, "volunteer");
         assertTrue(scanned.isValid());
         assertEquals("CHECKED_IN", scanned.getStatus());
