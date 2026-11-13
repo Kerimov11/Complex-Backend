@@ -206,27 +206,26 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
                             && p.getReservationId().equals(reservation.getId()))
                     .findFirst()
                     .orElse(i < items.size() ? items.get(i) : null);
-            if (match == null) {
-                continue;
-            }
-            if (match.getIdentityPhotoData() != null
-                    && match.getIdentityPhotoData().trim().startsWith("data:image/")) {
-                String idPhoto = match.getIdentityPhotoData().trim();
-                if (idPhoto.length() <= MAX_PHOTO_DATA_LENGTH) {
-                    reservation.setIdentityPhotoData(idPhoto);
-                    anyPhotoSubmitted = true;
+            if (match != null) {
+                if (match.getIdentityPhotoData() != null
+                        && match.getIdentityPhotoData().trim().startsWith("data:image/")) {
+                    String idPhoto = match.getIdentityPhotoData().trim();
+                    if (idPhoto.length() <= MAX_PHOTO_DATA_LENGTH) {
+                        reservation.setIdentityPhotoData(idPhoto);
+                        anyPhotoSubmitted = true;
+                    }
                 }
-            }
-            if (match.getStudentCardPhotoData() != null
-                    && match.getStudentCardPhotoData().trim().startsWith("data:image/")) {
-                String stPhoto = match.getStudentCardPhotoData().trim();
-                if (stPhoto.length() <= MAX_PHOTO_DATA_LENGTH) {
-                    reservation.setStudentCardPhotoData(stPhoto);
+                if (match.getStudentCardPhotoData() != null
+                        && match.getStudentCardPhotoData().trim().startsWith("data:image/")) {
+                    String stPhoto = match.getStudentCardPhotoData().trim();
+                    if (stPhoto.length() <= MAX_PHOTO_DATA_LENGTH) {
+                        reservation.setStudentCardPhotoData(stPhoto);
+                        reservation.setStudentDiscountApplied(true);
+                        anyPhotoSubmitted = true;
+                    }
+                } else if (Boolean.TRUE.equals(match.getStudentDiscountApplied())) {
                     reservation.setStudentDiscountApplied(true);
-                    anyPhotoSubmitted = true;
                 }
-            } else if (Boolean.TRUE.equals(match.getStudentDiscountApplied())) {
-                reservation.setStudentDiscountApplied(true);
             }
             if (anyPhotoSubmitted) {
                 reservation.setReviewStatus("PENDING_REVIEW");
