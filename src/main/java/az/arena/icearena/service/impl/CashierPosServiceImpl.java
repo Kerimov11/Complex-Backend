@@ -31,6 +31,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -279,8 +280,14 @@ public class CashierPosServiceImpl implements CashierPosService {
     }
 
     private List<Payment> posPayments(LocalDate date, String username, boolean allCashiers) {
-        LocalDateTime start = date.atStartOfDay();
-        LocalDateTime end = date.atTime(LocalTime.MAX);
+        ZoneId bakuZone = ZoneId.of("Asia/Baku");
+        ZoneId serverZone = ZoneId.systemDefault();
+        LocalDateTime start = date.atStartOfDay(bakuZone)
+                .withZoneSameInstant(serverZone)
+                .toLocalDateTime();
+        LocalDateTime end = date.atTime(LocalTime.MAX).atZone(bakuZone)
+                .withZoneSameInstant(serverZone)
+                .toLocalDateTime();
         if (allCashiers) {
             return paymentRepository.findByChannelAndPaymentDateBetween(
                     PaymentChannel.POS, start, end);
