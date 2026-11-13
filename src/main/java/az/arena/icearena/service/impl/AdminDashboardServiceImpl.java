@@ -43,9 +43,15 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
     @Override
     @Transactional(readOnly = true)
     public AdminDashboardDto getDashboard() {
-        LocalDate today = LocalDate.now();
-        LocalDateTime dayStart = today.atStartOfDay();
-        LocalDateTime dayEnd = today.atTime(LocalTime.MAX);
+        return getDashboard(LocalDate.now());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AdminDashboardDto getDashboard(LocalDate targetDate) {
+        LocalDate date = targetDate != null ? targetDate : LocalDate.now();
+        LocalDateTime dayStart = date.atStartOfDay();
+        LocalDateTime dayEnd = date.atTime(LocalTime.MAX);
         List<Payment> payments = paymentRepository.findAll();
         List<Payment> todayPayments = payments.stream()
                 .filter(payment -> within(payment, dayStart, dayEnd))
@@ -65,11 +71,14 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                 .toList());
 
         List<Reservation> todayReservations = reservationRepository.findByCreatedAtBetween(dayStart, dayEnd);
-        List<Session> todaySessions = sessionRepository.findBySessionDate(today);
+        List<Session> todaySessions = sessionRepository.findBySessionDate(date);
         LocalTime now = LocalTime.now();
+        boolean isToday = date.equals(LocalDate.now());
         long activeSessions = todaySessions.stream()
                 .filter(session -> !Boolean.TRUE.equals(session.getBlocked()))
-                .filter(session -> !now.isBefore(session.getStartTime()) && !now.isAfter(session.getEndTime()))
+                .filter(session -> isToday
+                        ? (!now.isBefore(session.getStartTime()) && !now.isAfter(session.getEndTime()))
+                        : true)
                 .count();
         int capacity = todaySessions.stream()
                 .mapToInt(session -> value(session.getMaxTicketLimit()))
@@ -79,7 +88,16 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                         value(session.getMaxTicketLimit()) - value(session.getAvailableTickets())))
                 .sum();
 
+        long checkedInOnDate = reservationRepository.findAll().stream()
+                .filter(r -> r.getCheckedInAt() != null && r.getCheckedInAt().toLocalDate().equals(date))
+                .count();
+        if (checkedInOnDate == 0 && isToday) {
+            checkedInOnDate = reservationRepository.findByCheckedInAtIsNotNull().size()
+                    + ticketRepository.countByIsUsedTrue();
+        }
+
         return AdminDashboardDto.builder()
+                .selectedDate(date)
                 .todayRevenue(todayOnline.add(todayPos))
                 .totalRevenue(sum(successful))
                 .todayOnlineRevenue(todayOnline)
@@ -87,9 +105,9 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                 .todayTransactions(todayPayments.size())
                 .totalPayments(payments.size())
                 .successfulPayments(successful.size())
-                .pendingPayments(payments.stream()
+                .pendingPayments(todayPayments.stream()
                         .filter(payment -> payment.getStatus() == PaymentStatus.PENDING).count())
-                .failedPayments(payments.stream()
+                .failedPayments(todayPayments.stream()
                         .filter(payment -> payment.getStatus() == PaymentStatus.FAILED).count())
                 .todayReservations(todayReservations.size())
                 .confirmedReservations(todayReservations.stream()
@@ -97,16 +115,15 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                         .count())
                 .todaySessions(todaySessions.size())
                 .activeSessions(activeSessions)
-                .checkedInTickets(reservationRepository.findByCheckedInAtIsNotNull().size()
-                        + ticketRepository.countByIsUsedTrue())
+                .checkedInTickets(checkedInOnDate)
                 .todayOccupancyRate(capacity == 0 ? 0d : round(occupied * 100d / capacity))
-                .sessions(buildSessions(todaySessions, now))
+                .sessions(buildSessions(todaySessions, now, isToday))
                 .stockAlerts(buildStockAlerts())
-                .revenueTrend(buildTrend(payments, today))
+                .revenueTrend(buildTrend(payments, date))
                 .build();
     }
 
-    private List<SessionOccupancyDto> buildSessions(List<Session> sessions, LocalTime now) {
+    private List<SessionOccupancyDto> buildSessions(List<Session> sessions, LocalTime now, boolean isToday) {
         return sessions.stream()
                 .sorted(Comparator.comparing(Session::getStartTime))
                 .map(session -> {
@@ -114,8 +131,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                     int available = value(session.getAvailableTickets());
                     int occupied = Math.max(0, max - available);
                     boolean active = !Boolean.TRUE.equals(session.getBlocked())
-                            && !now.isBefore(session.getStartTime())
-                            && !now.isAfter(session.getEndTime());
+                            && (!isToday || (!now.isBefore(session.getStartTime()) && !now.isAfter(session.getEndTime())));
                     return SessionOccupancyDto.builder()
                             .id(session.getId())
                             .startTime(session.getStartTime() == null ? "—" : session.getStartTime().format(TIME_FORMAT))
@@ -158,10 +174,10 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         return alerts;
     }
 
-    private List<RevenuePointDto> buildTrend(List<Payment> payments, LocalDate today) {
+    private List<RevenuePointDto> buildTrend(List<Payment> payments, LocalDate baseDate) {
         List<RevenuePointDto> trend = new ArrayList<>();
         for (int offset = 6; offset >= 0; offset--) {
-            LocalDate date = today.minusDays(offset);
+            LocalDate date = baseDate.minusDays(offset);
             List<Payment> dayPayments = payments.stream()
                     .filter(payment -> payment.getStatus() == PaymentStatus.SUCCESS)
                     .filter(payment -> payment.getPaymentDate() != null
