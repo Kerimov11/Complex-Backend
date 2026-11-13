@@ -54,6 +54,8 @@ public class SecurityConfig {
                         .hasAnyRole("ADMIN", "COORDINATOR", "CASHIER")
                         .requestMatchers("/api/admin/pos/**")
                         .hasAnyRole("ADMIN", "CASHIER")
+                        .requestMatchers("/api/admin/identity-verifications/**")
+                        .hasAnyRole("ADMIN", "COORDINATOR", "CASHIER")
                         .requestMatchers("/api/admin/**")
                         .hasRole("ADMIN")
                         .anyRequest().authenticated()
