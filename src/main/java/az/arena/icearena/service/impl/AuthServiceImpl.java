@@ -17,6 +17,7 @@ import az.arena.icearena.repository.RoleRepository;
 import az.arena.icearena.repository.UserRepository;
 import az.arena.icearena.service.AuthService;
 import az.arena.icearena.service.CustomerVerificationService;
+import az.arena.icearena.service.EmailValidationService;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -43,10 +44,12 @@ public class AuthServiceImpl implements AuthService {
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
     private final CustomerVerificationService customerVerificationService;
+    private final EmailValidationService emailValidationService;
 
     @Override
     @Transactional
     public AuthenticationResponse register(RegisterRequest request) {
+        emailValidationService.validate(request.getEmail());
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new BadRequestException("Bu istifadəçi adı artıq mövcuddur.");
         }

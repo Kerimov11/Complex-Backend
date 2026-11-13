@@ -9,6 +9,7 @@ import az.arena.icearena.exception.BadRequestException;
 import az.arena.icearena.exception.ResourceNotFoundException;
 import az.arena.icearena.repository.UserRepository;
 import az.arena.icearena.service.CustomerVerificationService;
+import az.arena.icearena.service.EmailValidationService;
 import jakarta.validation.Valid;
 import java.security.Principal;
 import java.time.LocalDate;
@@ -34,6 +35,7 @@ public class CustomerProfileController {
 
     private final UserRepository userRepository;
     private final CustomerVerificationService customerVerificationService;
+    private final EmailValidationService emailValidationService;
     private final PasswordEncoder passwordEncoder;
 
     @GetMapping
@@ -51,9 +53,11 @@ public class CustomerProfileController {
         User user = findUser(principal.getName());
 
         String nextEmail = request.getEmail().trim();
-        if (!nextEmail.equalsIgnoreCase(user.getEmail())
-                && userRepository.existsByEmail(nextEmail)) {
-            throw new BadRequestException("Bu e-poçt ünvanı artıq başqa hesabda istifadə olunur.");
+        if (!nextEmail.equalsIgnoreCase(user.getEmail())) {
+            emailValidationService.validate(nextEmail);
+            if (userRepository.existsByEmail(nextEmail)) {
+                throw new BadRequestException("Bu e-poçt ünvanı artıq başqa hesabda istifadə olunur.");
+            }
         }
 
         if (request.getDateOfBirth() != null) {
