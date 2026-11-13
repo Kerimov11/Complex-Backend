@@ -242,10 +242,10 @@ public class TicketServiceImpl implements TicketService {
         } else if ("REJECTED".equals(userReviewStatus)) {
             effectiveReviewStatus = "REJECTED";
             effectiveRejectionReason = first.getUser().getIdentityRejectionReason();
-        } else if ("PENDING_REVIEW".equals(ticketReviewStatus) || "PENDING_REVIEW".equals(userReviewStatus)) {
-            effectiveReviewStatus = "PENDING_REVIEW";
         } else if ("APPROVED".equals(ticketReviewStatus) || "APPROVED".equals(userReviewStatus)) {
             effectiveReviewStatus = "APPROVED";
+        } else if ("PENDING_REVIEW".equals(ticketReviewStatus) || "PENDING_REVIEW".equals(userReviewStatus)) {
+            effectiveReviewStatus = "PENDING_REVIEW";
         } else {
             effectiveReviewStatus = null;
         }

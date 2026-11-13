@@ -105,6 +105,16 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
             r.setReviewedAt(now);
             r.setReviewedBy(reviewerUsername);
             r.setReviewReason(null);
+            if (r.getUser() != null) {
+                User u = r.getUser();
+                u.setIdentityReviewStatus("APPROVED");
+                u.setIdentityConfirmedAt(now);
+                u.setAgeVerifiedAt(now);
+                u.setIdentityReviewedAt(now);
+                u.setIdentityReviewedBy(reviewerUsername);
+                u.setIdentityRejectionReason(null);
+                userRepository.save(u);
+            }
         }
         reservationRepository.saveAll(group);
         return toTicketReviewDto(ticketCode, group);
@@ -187,11 +197,26 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
     public IdentityVerificationAdminDto approve(Long userId, String reviewerUsername) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("İstifadəçi tapılmadı: " + userId));
+        LocalDateTime now = LocalDateTime.now();
         user.setIdentityReviewStatus("APPROVED");
-        user.setIdentityReviewedAt(LocalDateTime.now());
+        user.setIdentityConfirmedAt(now);
+        user.setAgeVerifiedAt(now);
+        user.setIdentityReviewedAt(now);
         user.setIdentityReviewedBy(reviewerUsername);
         user.setIdentityRejectionReason(null);
         userRepository.save(user);
+
+        List<Reservation> userReservations = reservationRepository.findByUserId(userId);
+        for (Reservation reservation : userReservations) {
+            if ("PENDING_REVIEW".equals(reservation.getReviewStatus())) {
+                reservation.setReviewStatus("APPROVED");
+                reservation.setReviewedAt(now);
+                reservation.setReviewedBy(reviewerUsername);
+                reservation.setReviewReason(null);
+            }
+        }
+        reservationRepository.saveAll(userReservations);
+
         return toDto(user);
     }
 
