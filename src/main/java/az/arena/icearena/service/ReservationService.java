@@ -75,6 +75,9 @@ public class ReservationService {
                                          String voucherCode,
                                          String participantName,
                                          Integer participantAge) {
+        if (participantAge != null && (participantAge < 4 || participantAge > 120)) {
+            throw new BadRequestException("İştirakçının yaşı 4 ilə 120 arasında olmalıdır.");
+        }
         User user = resolveUser(userId, username, admin);
         if (username != null && !admin) {
             customerVerificationService.requireTicketPurchaseEligibility(user);
