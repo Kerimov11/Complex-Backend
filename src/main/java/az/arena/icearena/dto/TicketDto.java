@@ -58,4 +58,7 @@ public class TicketDto {
     private String iceExitTime;
     private String identityReviewStatus;
     private String identityRejectionReason;
+    private LocalDateTime skateReturnedAt;
+    private Boolean skateReturned;
+    private Boolean canReturnSkates;
 }

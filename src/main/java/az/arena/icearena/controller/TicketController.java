@@ -1,4 +1,3 @@
-// File: src/main/java/az/arena/icearena/controller/TicketController.java
 package az.arena.icearena.controller;
 
 import az.arena.icearena.dto.TicketDto;
@@ -25,8 +24,9 @@ public class TicketController {
     private final TicketService ticketService;
 
     @PostMapping("/purchase")
-    public ResponseEntity<List<TicketDto>> purchaseTickets(@Valid @RequestBody TicketPurchaseRequest request,
-                                                            Principal principal) {
+    public ResponseEntity<List<TicketDto>> purchaseTickets(
+            @Valid @RequestBody TicketPurchaseRequest request,
+            Principal principal) {
         return ResponseEntity.ok(ticketService.purchaseTickets(request, principal.getName()));
     }
 
@@ -51,5 +51,11 @@ public class TicketController {
     public ResponseEntity<String> validateTicket(@PathVariable String ticketCode) {
         ticketService.validateTicket(ticketCode);
         return ResponseEntity.ok("Ticket validated successfully");
+    }
+
+    @PostMapping("/{ticketCode}/return-skates")
+    public ResponseEntity<TicketDto> returnSkates(@PathVariable String ticketCode, Principal principal) {
+        String username = principal != null ? principal.getName() : null;
+        return ResponseEntity.ok(ticketService.returnSkates(ticketCode, username));
     }
 }

@@ -4,6 +4,7 @@ package az.arena.icearena.service.impl;
 import az.arena.icearena.dto.TicketDto;
 import az.arena.icearena.dto.TicketPurchaseRequest;
 import az.arena.icearena.entity.Reservation;
+import az.arena.icearena.entity.RoleName;
 import az.arena.icearena.entity.Session;
 import az.arena.icearena.entity.Skate;
 import az.arena.icearena.entity.Ticket;
@@ -14,6 +15,7 @@ import az.arena.icearena.exception.ResourceNotFoundException;
 import az.arena.icearena.mapper.TicketMapper;
 import az.arena.icearena.repository.ReservationRepository;
 import az.arena.icearena.repository.SessionRepository;
+import az.arena.icearena.repository.SkateRepository;
 import az.arena.icearena.repository.TicketRepository;
 import az.arena.icearena.repository.UserRepository;
 import az.arena.icearena.service.PaymentService;
@@ -47,6 +49,7 @@ public class TicketServiceImpl implements TicketService {
     private final SessionRepository sessionRepository;
     private final UserRepository userRepository;
     private final ReservationRepository reservationRepository;
+    private final SkateRepository skateRepository;
     private final TicketMapper ticketMapper;
     private final PaymentService paymentService;
     private final CustomerVerificationService customerVerificationService;
@@ -158,6 +161,68 @@ public class TicketServiceImpl implements TicketService {
         }
         ticket.setIsUsed(true);
         ticketRepository.save(ticket);
+    }
+
+    @Override
+    @Transactional
+    public TicketDto returnSkates(String ticketCode, String username) {
+        String normalized = ticketCode == null ? "" : ticketCode.trim();
+        List<Reservation> reservations = reservationRepository.findByVoucherCodeIgnoreCase(normalized);
+        if (reservations.isEmpty()) {
+            throw new ResourceNotFoundException("Bilet tapılmadı: " + ticketCode);
+        }
+
+        Reservation first = reservations.get(0);
+        LocalDateTime now = LocalDateTime.now();
+
+        if (username != null) {
+            User caller = userRepository.findByUsername(username).orElse(null);
+            if (caller != null) {
+                boolean isStaff = caller.getRoles() != null && caller.getRoles().stream()
+                        .anyMatch(r -> r.getName() == RoleName.ROLE_ADMIN
+                                || r.getName() == RoleName.ROLE_CASHIER
+                                || r.getName() == RoleName.ROLE_COORDINATOR);
+                if (!isStaff && first.getUser() != null && !caller.getId().equals(first.getUser().getId())) {
+                    throw new BadRequestException("Bu bilet sizin hesabınıza aid deyil.");
+                }
+            }
+        }
+
+        if (first.getCheckedInAt() == null) {
+            throw new BadRequestException("Bilet turniketdə təsdiqlənməyib. Giriş qeydə alınmadan konki təhvil verilə bilməz.");
+        }
+
+        int durationMins = first.getDurationMinutes() != null ? first.getDurationMinutes() : 60;
+        LocalDateTime checkedOutAt = first.getCheckedInAt().plusMinutes(durationMins);
+        if (now.isBefore(checkedOutAt)) {
+            long remainingMinutes = java.time.Duration.between(now, checkedOutAt).toMinutes() + 1;
+            throw new BadRequestException("Sürüş müddətiniz hələ bitməyib (təxminən " + remainingMinutes + " dəqiqə qalıb). Konkini yalnız müddət bitdikdən sonra təhvil verə bilərsiniz.");
+        }
+
+        boolean alreadyReturned = reservations.stream().allMatch(r -> r.getSkateReturnedAt() != null);
+        if (alreadyReturned) {
+            throw new BadRequestException("Bu bilet üzrə konkilər artıq anbara təhvil verilib.");
+        }
+
+        // Bilet qrupunda neçə konki varsa, hər birini anbara qaytarırıq (stoku artırırıq)
+        for (Reservation reservation : reservations) {
+            if (reservation.getSkateReturnedAt() == null) {
+                if (reservation.getSkate() != null) {
+                    Skate skate = reservation.getSkate();
+                    int avail = skate.getAvailableQuantity() == null ? 0 : skate.getAvailableQuantity();
+                    int total = skate.getTotalQuantity() == null ? 0 : skate.getTotalQuantity();
+                    skate.setAvailableQuantity(Math.min(total, avail + 1));
+                    skateRepository.save(skate);
+                }
+                reservation.setSkateReturnedAt(now);
+                reservation.setSkateReturnedBy(username != null ? username : "CUSTOMER");
+                reservation.setSkateStockDeducted(false);
+                reservation.setTimerExpiresAt(null);
+                reservationRepository.save(reservation);
+            }
+        }
+
+        return reservationGroupToDto(normalized, reservations);
     }
 
     private List<TicketDto> reservationGroups(Long userId) {
@@ -297,6 +362,15 @@ public class TicketServiceImpl implements TicketService {
             iceExitTime = bakuOut.toLocalTime().format(fmt);
         }
 
+        boolean anyReturned = reservations.stream().anyMatch(r -> r.getSkateReturnedAt() != null);
+        LocalDateTime skateReturnedAt = reservations.stream()
+                .map(Reservation::getSkateReturnedAt)
+                .filter(Objects::nonNull)
+                .min(LocalDateTime::compareTo)
+                .orElse(null);
+        boolean durationExpired = checkedInAt != null && !now.isBefore(checkedOutAt);
+        boolean canReturnSkates = checkedInAt != null && durationExpired && !anyReturned;
+
         return TicketDto.builder()
                 .id(first.getId())
                 .ticketCode(ticketCode)
@@ -333,6 +407,9 @@ public class TicketServiceImpl implements TicketService {
                 .iceExitTime(iceExitTime)
                 .identityReviewStatus(effectiveReviewStatus)
                 .identityRejectionReason(effectiveRejectionReason)
+                .skateReturned(anyReturned)
+                .skateReturnedAt(skateReturnedAt)
+                .canReturnSkates(canReturnSkates)
                 .build();
     }
 

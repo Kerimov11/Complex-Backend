@@ -133,6 +133,12 @@ public class Reservation {
     @Column(length = 50)
     private String skateHandedOutBy;
 
+    /** Müştəri sürüş bitdikdən sonra konkini anbara təhvil verdikdə doldurulur. */
+    private LocalDateTime skateReturnedAt;
+
+    @Column(length = 50)
+    private String skateReturnedBy;
+
     @Column(length = 40)
     private String discountType;
 

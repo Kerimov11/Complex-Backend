@@ -1,4 +1,3 @@
-// File: src/main/java/az/arena/icearena/service/TicketService.java
 package az.arena.icearena.service;
 
 import az.arena.icearena.dto.TicketDto;
@@ -17,4 +16,6 @@ public interface TicketService {
     TicketDto getTicketByCode(String ticketCode);
 
     void validateTicket(String ticketCode);
+
+    TicketDto returnSkates(String ticketCode, String username);
 }
