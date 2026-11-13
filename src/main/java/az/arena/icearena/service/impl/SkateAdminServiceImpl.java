@@ -7,6 +7,7 @@ import az.arena.icearena.exception.BadRequestException;
 import az.arena.icearena.exception.ResourceNotFoundException;
 import az.arena.icearena.repository.ReservationRepository;
 import az.arena.icearena.repository.SkateRepository;
+import az.arena.icearena.service.ReservationActivationService;
 import az.arena.icearena.service.SkateAdminService;
 import java.util.Comparator;
 import java.util.List;
@@ -20,10 +21,12 @@ public class SkateAdminServiceImpl implements SkateAdminService {
 
     private final SkateRepository skateRepository;
     private final ReservationRepository reservationRepository;
+    private final ReservationActivationService reservationActivationService;
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public List<SkateDto> list() {
+        reservationActivationService.expireStaleReservations();
         return skateRepository.findAll().stream()
                 .sorted(Comparator.comparing(Skate::getSize))
                 .map(this::toDto)
