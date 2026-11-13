@@ -74,6 +74,14 @@ public class VerificationServiceImpl implements VerificationService {
                         .build();
             }
 
+            if (reservations.stream().anyMatch(r -> r.getCashierVerifiedAt() == null)) {
+                return reservationBuilder(reservations, normalized)
+                        .valid(false)
+                        .status("NOT_CASHIER_VERIFIED")
+                        .message("Bilet öncə Kassa QR-da skan olunmalıdır.")
+                        .build();
+            }
+
             for (Reservation reservation : reservations) {
                 reservation.setStatus(Reservation.Status.CONFIRMED);
                 if (reservation.getCashierVerifiedAt() == null) {
@@ -578,6 +586,13 @@ public class VerificationServiceImpl implements VerificationService {
             check.setValid(false);
             check.setStatus("ALREADY_USED");
             check.setMessage("Bu QR bilet artıq turniketdə istifadə olunub (" + checkTime + "). Təkrar turniketdə skan edilə bilməz.");
+            return check;
+        }
+        if (ticket.getCashierVerifiedAt() == null
+                && (ticket.getSoldByUsername() == null || ticket.getSoldByUsername().isBlank())) {
+            check.setValid(false);
+            check.setStatus("NOT_CASHIER_VERIFIED");
+            check.setMessage("Bilet öncə Kassa QR-da skan olunmalıdır.");
             return check;
         }
         LocalDateTime now = LocalDateTime.now();
