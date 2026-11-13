@@ -232,10 +232,15 @@ public class TicketServiceImpl implements TicketService {
             statusLabel = "Aktiv";
         }
 
+        String identityReviewStatus = first.getUser() != null ? first.getUser().getIdentityReviewStatus() : null;
+        boolean identityBlocked = "PENDING_REVIEW".equals(identityReviewStatus)
+                || "REJECTED".equals(identityReviewStatus);
+
         boolean canActivate = allConfirmed
                 && !anyCheckedIn
                 && !anyHandedOut
                 && !activeTimer
+                && !identityBlocked
                 && remainingActivations > 0;
 
         List<String> skateSizes = reservations.stream()

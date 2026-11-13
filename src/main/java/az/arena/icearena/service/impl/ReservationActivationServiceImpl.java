@@ -88,6 +88,17 @@ public class ReservationActivationServiceImpl implements ReservationActivationSe
         LocalDateTime now = LocalDateTime.now();
 
         for (Reservation reservation : reservations) {
+            if (reservation.getUser() != null) {
+                String reviewStatus = reservation.getUser().getIdentityReviewStatus();
+                if ("PENDING_REVIEW".equals(reviewStatus)) {
+                    throw new BadRequestException(
+                            "Biletiniz hələ kassir tərəfindən təsdiqlənməyib. Təsdiqdən sonra konki rezervasiyası edə bilərsiniz.");
+                }
+                if ("REJECTED".equals(reviewStatus)) {
+                    throw new BadRequestException(
+                            "Şəxsiyyət təsdiqiniz rədd edilib. Zəhmət olmasa Hesabım bölməsindən yeni foto göndərin.");
+                }
+            }
             if (reservation.getStatus() != Reservation.Status.CONFIRMED) {
                 throw new BadRequestException(
                         "Yalnız ödənişi təsdiqlənmiş biletlər üçün konki rezervasiyası aktivləşdirilə bilər.");
