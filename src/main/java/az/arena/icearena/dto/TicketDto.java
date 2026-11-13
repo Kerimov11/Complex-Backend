@@ -52,4 +52,8 @@ public class TicketDto {
     private Long timerRemainingSeconds;
     private Boolean skateStockDeducted;
     private Boolean skateHandedOut;
+    private LocalDateTime checkedInAt;
+    private LocalDateTime checkedOutAt;
+    private String iceEntryTime;
+    private String iceExitTime;
 }

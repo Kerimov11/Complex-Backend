@@ -25,6 +25,9 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.Objects;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -249,6 +252,24 @@ public class TicketServiceImpl implements TicketService {
                 .filter(value -> value != null)
                 .min(LocalDateTime::compareTo)
                 .orElse(null);
+        LocalDateTime checkedInAt = reservations.stream()
+                .map(Reservation::getCheckedInAt)
+                .filter(Objects::nonNull)
+                .min(LocalDateTime::compareTo)
+                .orElse(null);
+        int durationMins = first.getDurationMinutes() != null ? first.getDurationMinutes() : 60;
+        LocalDateTime checkedOutAt = checkedInAt != null ? checkedInAt.plusMinutes(durationMins) : null;
+        String iceEntryTime = null;
+        String iceExitTime = null;
+        if (checkedInAt != null) {
+            ZoneId serverZone = ZoneId.systemDefault();
+            ZoneId bakuZone = ZoneId.of("Asia/Baku");
+            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("HH:mm");
+            LocalDateTime bakuIn = checkedInAt.atZone(serverZone).withZoneSameInstant(bakuZone).toLocalDateTime();
+            LocalDateTime bakuOut = bakuIn.plusMinutes(durationMins);
+            iceEntryTime = bakuIn.toLocalTime().format(fmt);
+            iceExitTime = bakuOut.toLocalTime().format(fmt);
+        }
 
         return TicketDto.builder()
                 .id(first.getId())
@@ -280,6 +301,10 @@ public class TicketServiceImpl implements TicketService {
                         : Math.max(0, Duration.between(now, timerExpiresAt).getSeconds()))
                 .skateStockDeducted(activeTimer)
                 .skateHandedOut(anyHandedOut)
+                .checkedInAt(checkedInAt)
+                .checkedOutAt(checkedOutAt)
+                .iceEntryTime(iceEntryTime)
+                .iceExitTime(iceExitTime)
                 .build();
     }
 
