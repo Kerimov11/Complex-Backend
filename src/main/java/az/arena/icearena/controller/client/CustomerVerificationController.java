@@ -60,4 +60,11 @@ public class CustomerVerificationController {
         return ResponseEntity.ok(verificationService.saveTicketPhotos(
                 principal.getName(), request));
     }
+
+    @GetMapping("/push30-check")
+    public ResponseEntity<java.util.Map<String, Boolean>> checkPush30Phone(
+            @org.springframework.web.bind.annotation.RequestParam String phone) {
+        return ResponseEntity.ok(java.util.Map.of(
+                "used", verificationService.isPush30PhoneUsed(phone)));
+    }
 }

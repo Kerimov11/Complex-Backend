@@ -28,6 +28,8 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
     boolean existsBySkateId(Long skateId);
 
+    boolean existsByPush30PhoneAndStatusNot(String push30Phone, Reservation.Status status);
+
     long countBySessionIdAndStatusIn(Long sessionId, Collection<Reservation.Status> statuses);
 
     long countBySessionIdAndSkateIdAndStatusIn(Long sessionId, Long skateId,

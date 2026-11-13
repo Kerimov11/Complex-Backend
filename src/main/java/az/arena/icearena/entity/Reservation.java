@@ -92,6 +92,18 @@ public class Reservation {
     /** Bu iştirakçıya tələbə endirimi tətbiq olunubmu. */
     private Boolean studentDiscountApplied;
 
+    /** Ailə endirimi seçildikdə 3 şəxsiyyət vəsiqəsinin yan-yana fotosu. */
+    @Column(columnDefinition = "TEXT")
+    private String familyIdsPhotoData;
+
+    /** PUSH30 endirimi seçildikdə Premium paket ekran şəkli. */
+    @Column(columnDefinition = "TEXT")
+    private String push30ScreenshotData;
+
+    /** PUSH30 endirimi üçün istifadə edilən qeydiyyat telefon nömrəsi (tək səfərlik). */
+    @Column(length = 32)
+    private String push30Phone;
+
     /** Kassada (Kassa QR) təsdiqləndiyi an. */
     private LocalDateTime cashierVerifiedAt;
 

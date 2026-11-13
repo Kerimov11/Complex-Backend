@@ -48,6 +48,9 @@ public class IdentityVerificationAdminDto {
         private List<String> skateSizes = new ArrayList<>();
         private String status;
         private LocalDateTime purchaseDate;
+        private String familyIdsPhotoData;
+        private String push30ScreenshotData;
+        private String push30Phone;
         @Builder.Default
         private List<ParticipantPhotoSummary> participantPhotos = new ArrayList<>();
     }

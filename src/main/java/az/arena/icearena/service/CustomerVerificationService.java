@@ -19,6 +19,8 @@ public interface CustomerVerificationService {
 
     CustomerVerificationDto saveTicketPhotos(String username, TicketPhotosRequest request);
 
+    boolean isPush30PhoneUsed(String phone);
+
     /**
      * Bilet almaq üçün müştərinin 18+ və şəxsiyyət vəsiqəsi təsdiqli
      * olmasını yoxlayır. Staff rolları bu yoxlamadan azaddır.

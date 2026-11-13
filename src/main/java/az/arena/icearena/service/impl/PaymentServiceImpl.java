@@ -90,6 +90,20 @@ public class PaymentServiceImpl implements PaymentService {
 
         customerVerificationService.requireTicketPurchaseEligibility(user);
 
+        if (Boolean.TRUE.equals(request.getPush30())) {
+            String normalizedPhone = request.getPush30Phone() == null
+                    ? ""
+                    : request.getPush30Phone().replaceAll("[^0-9]", "");
+            if (normalizedPhone.length() < 9) {
+                throw new BadRequestException("PUSH30 qeydiyyat telefon nömrəsini düzgün daxil edin.");
+            }
+            if (reservationRepository.existsByPush30PhoneAndStatusNot(
+                    normalizedPhone, Reservation.Status.CANCELLED)) {
+                throw new BadRequestException(
+                        "Bu nömrə ilə PUSH30 endirimindən artıq istifadə olunub. PUSH30 endirimi yalnız 1 gedişlikdir.");
+            }
+        }
+
         List<Long> reservationIds = request.getReservationIds() == null
                 ? List.of()
                 : request.getReservationIds().stream().filter(id -> id != null).toList();

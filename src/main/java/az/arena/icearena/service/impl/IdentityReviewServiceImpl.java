@@ -223,6 +223,9 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
                 .skateSizes(sizes)
                 .status(first.getStatus() != null ? first.getStatus().name() : null)
                 .purchaseDate(purchaseDate)
+                .familyIdsPhotoData(first.getFamilyIdsPhotoData())
+                .push30ScreenshotData(first.getPush30ScreenshotData())
+                .push30Phone(first.getPush30Phone())
                 .participantPhotos(participantPhotos)
                 .build();
     }

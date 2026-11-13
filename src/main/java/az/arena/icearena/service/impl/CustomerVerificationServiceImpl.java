@@ -147,11 +147,39 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
                 request.getParticipants() == null ? List.of() : request.getParticipants();
         boolean anyPhotoSubmitted = false;
 
+        String familyPhoto = request.getFamilyIdsPhotoData() == null
+                ? "" : request.getFamilyIdsPhotoData().trim();
+        String push30Photo = request.getPush30ScreenshotData() == null
+                ? "" : request.getPush30ScreenshotData().trim();
+        String push30Phone = request.getPush30Phone() == null
+                ? "" : request.getPush30Phone().replaceAll("[^0-9]", "");
+
+        if (!push30Phone.isEmpty()) {
+            boolean usedElsewhere = reservationRepository.existsByPush30PhoneAndStatusNot(
+                    push30Phone, Reservation.Status.CANCELLED)
+                    && reservations.stream().noneMatch(r -> push30Phone.equals(r.getPush30Phone()));
+            if (usedElsewhere) {
+                throw new BadRequestException(
+                        "Bu nömrə ilə PUSH30 endirimindən artıq istifadə olunub. PUSH30 endirimi yalnız 1 gedişlikdir.");
+            }
+        }
+
         for (int i = 0; i < reservations.size(); i++) {
             Reservation reservation = reservations.get(i);
             if (reservation.getUser() == null
                     || !reservation.getUser().getId().equals(user.getId())) {
                 continue;
+            }
+            if (familyPhoto.startsWith("data:image/") && familyPhoto.length() <= MAX_PHOTO_DATA_LENGTH) {
+                reservation.setFamilyIdsPhotoData(familyPhoto);
+                anyPhotoSubmitted = true;
+            }
+            if (push30Photo.startsWith("data:image/") && push30Photo.length() <= MAX_PHOTO_DATA_LENGTH) {
+                reservation.setPush30ScreenshotData(push30Photo);
+                anyPhotoSubmitted = true;
+            }
+            if (!push30Phone.isEmpty()) {
+                reservation.setPush30Phone(push30Phone);
             }
             TicketPhotosRequest.ParticipantPhoto match = items.stream()
                     .filter(p -> p.getReservationId() != null
@@ -191,6 +219,17 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
             userRepository.save(user);
         }
         return toDto(user);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isPush30PhoneUsed(String phone) {
+        String normalized = phone == null ? "" : phone.replaceAll("[^0-9]", "");
+        if (normalized.length() < 9) {
+            return false;
+        }
+        return reservationRepository.existsByPush30PhoneAndStatusNot(
+                normalized, Reservation.Status.CANCELLED);
     }
 
     @Override

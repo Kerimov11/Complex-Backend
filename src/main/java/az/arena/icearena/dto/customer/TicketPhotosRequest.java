@@ -15,6 +15,9 @@ public class TicketPhotosRequest {
 
     private String voucherCode;
     private Integer studentCount;
+    private String familyIdsPhotoData;
+    private String push30ScreenshotData;
+    private String push30Phone;
 
     @Builder.Default
     private List<ParticipantPhoto> participants = new ArrayList<>();
