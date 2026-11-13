@@ -50,15 +50,32 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public AuthenticationResponse register(RegisterRequest request) {
         emailValidationService.validate(request.getEmail());
+        String normalizedEmail = request.getEmail().trim().toLowerCase(java.util.Locale.ROOT);
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new BadRequestException("Bu istifadəçi adı artıq mövcuddur.");
         }
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new BadRequestException("Bu e-poçt ünvanı artıq istifadə olunur.");
+        if (userRepository.existsByEmailIgnoreCase(normalizedEmail)
+                || isCanonicalGmailUsed(normalizedEmail)) {
+            throw new BadRequestException("Bu e-poçt ünvanı ilə artıq hesab mövcuddur.");
         }
         if (request.getPhoneNumber() == null || request.getPhoneNumber().isBlank()) {
             throw new BadRequestException("Telefon nömrəsi tələb olunur.");
         }
+        String normalizedPhoneDigits = normalizePhoneDigits(request.getPhoneNumber());
+        if (normalizedPhoneDigits.length() < 9) {
+            throw new BadRequestException("Telefon nömrəsini düzgün daxil edin.");
+        }
+        boolean phoneUsed = userRepository.existsByPhoneNumber(request.getPhoneNumber().trim())
+                || userRepository.findByPhoneNumberIsNotNull().stream()
+                .map(User::getPhoneNumber)
+                .map(this::normalizePhoneDigits)
+                .anyMatch(existing -> !existing.isEmpty() && existing.equals(normalizedPhoneDigits));
+        if (phoneUsed) {
+            throw new BadRequestException("Bu telefon nömrəsi ilə artıq hesab mövcuddur.");
+        }
+        String storedPhone = normalizedPhoneDigits.length() == 12 && normalizedPhoneDigits.startsWith("994")
+                ? "+" + normalizedPhoneDigits
+                : request.getPhoneNumber().trim();
 
         Role userRole = roleRepository.findByName(RoleName.ROLE_USER)
                 .orElseThrow(() -> new BadRequestException("Default role not found"));
@@ -79,11 +96,11 @@ public class AuthServiceImpl implements AuthService {
 
         User user = User.builder()
                 .username(request.getUsername().trim())
-                .email(request.getEmail().trim())
+                .email(normalizedEmail)
                 .password(passwordEncoder.encode(request.getPassword()))
                 .firstName(request.getFirstName().trim())
                 .lastName(request.getLastName().trim())
-                .phoneNumber(request.getPhoneNumber().trim())
+                .phoneNumber(storedPhone)
                 .dateOfBirth(dob)
                 .ageVerifiedAt(dob != null ? java.time.LocalDateTime.now() : null)
                 .roles(roles)
@@ -293,5 +310,52 @@ public class AuthServiceImpl implements AuthService {
         return user.getRoles().stream()
                 .map(role -> role.getName().name())
                 .collect(java.util.stream.Collectors.toSet());
+    }
+
+    private boolean isCanonicalGmailUsed(String normalizedEmail) {
+        String target = canonicalizeGmail(normalizedEmail);
+        if (target == null) {
+            return false;
+        }
+        return userRepository.findAll().stream()
+                .map(User::getEmail)
+                .map(this::canonicalizeGmail)
+                .anyMatch(target::equals);
+    }
+
+    private String canonicalizeGmail(String email) {
+        if (email == null) {
+            return null;
+        }
+        String lower = email.trim().toLowerCase(java.util.Locale.ROOT);
+        int at = lower.indexOf('@');
+        if (at <= 0) {
+            return null;
+        }
+        String local = lower.substring(0, at);
+        String domain = lower.substring(at + 1);
+        if (!"gmail.com".equals(domain) && !"googlemail.com".equals(domain)) {
+            return null;
+        }
+        int plus = local.indexOf('+');
+        if (plus >= 0) {
+            local = local.substring(0, plus);
+        }
+        local = local.replace(".", "");
+        return local + "@gmail.com";
+    }
+
+    private String normalizePhoneDigits(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String digits = raw.replaceAll("[^0-9]", "");
+        if (digits.length() == 10 && digits.startsWith("0")) {
+            return "994" + digits.substring(1);
+        }
+        if (digits.length() == 9) {
+            return "994" + digits;
+        }
+        return digits;
     }
 }
