@@ -4,5 +4,6 @@ package az.arena.icearena.entity;
 public enum PaymentStatus {
     PENDING,
     SUCCESS,
-    FAILED
+    FAILED,
+    REFUNDED
 }

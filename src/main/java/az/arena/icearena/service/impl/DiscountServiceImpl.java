@@ -134,9 +134,44 @@ public class DiscountServiceImpl implements DiscountService {
                 && isHour
                 && request.getDate().getDayOfWeek() != DayOfWeek.SATURDAY
                 && request.getDate().getDayOfWeek() != DayOfWeek.SUNDAY) {
-            candidates.add(percentCandidate(DiscountType.STUDENT,
-                    "Tələbə endirimi — həftəiçi 20%", unit, qty,
-                    percent(studentRule.getPercent(), new BigDecimal("20.00"))));
+            int sCount = request.getStudentCount() == null
+                    ? qty
+                    : Math.max(0, Math.min(qty, request.getStudentCount()));
+            BigDecimal studentPct = percent(studentRule.getPercent(), new BigDecimal("20.00"));
+            String pctText = studentPct.stripTrailingZeros().toPlainString();
+            if (sCount >= qty) {
+                candidates.add(percentCandidate(DiscountType.STUDENT,
+                        "Tələbə endirimi — həftəiçi " + pctText + "%",
+                        unit, qty, studentPct));
+            } else if (sCount > 0) {
+                BigDecimal factor = BigDecimal.ONE.subtract(
+                        studentPct.divide(new BigDecimal("100"), 6, RoundingMode.HALF_UP));
+                BigDecimal studentUnit = money(unit.multiply(factor));
+                BigDecimal studentTotal = money(studentUnit.multiply(BigDecimal.valueOf(sCount)));
+                int regularCount = qty - sCount;
+                BigDecimal regularTotal = money(unit.multiply(BigDecimal.valueOf(regularCount)));
+                BigDecimal finalStudentPrice = money(studentTotal.add(regularTotal));
+                List<PriceLineDto> studentLines = new ArrayList<>();
+                studentLines.add(PriceLineDto.builder()
+                        .label("Tələbə girişi (" + pctText + "% endirim)")
+                        .quantity(sCount)
+                        .unitPrice(studentUnit)
+                        .total(studentTotal)
+                        .build());
+                studentLines.add(PriceLineDto.builder()
+                        .label("Standart giriş")
+                        .quantity(regularCount)
+                        .unitPrice(unit)
+                        .total(regularTotal)
+                        .build());
+                candidates.add(new Candidate(
+                        DiscountType.STUDENT,
+                        "Tələbə endirimi — " + sCount + "/" + qty + " nəfər (" + pctText + "%)",
+                        finalStudentPrice,
+                        0,
+                        unit,
+                        studentLines));
+            }
         }
 
         // 8) Bazar günü 10:00–12:00 arası 1 saatlıq biletə 20%.

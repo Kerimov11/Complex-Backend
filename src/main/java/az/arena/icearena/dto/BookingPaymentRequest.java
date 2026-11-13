@@ -35,6 +35,7 @@ public class BookingPaymentRequest {
     private Integer durationMinutes;
 
     private Boolean student;
+    private Integer studentCount;
     private Boolean family;
     private Boolean push30;
     private Boolean qazi;

@@ -81,6 +81,17 @@ public class Reservation {
     /** İştirakçının yaşı (onlayn bilet alışında doldurulur). */
     private Integer participantAge;
 
+    /** İştirakçının şəxsiyyət vəsiqəsi ilə foto təsdiqi (base64 data URL). */
+    @Column(columnDefinition = "TEXT")
+    private String identityPhotoData;
+
+    /** Tələbə endirimi seçildikdə tələbə kartı ilə foto təsdiqi (base64 data URL). */
+    @Column(columnDefinition = "TEXT")
+    private String studentCardPhotoData;
+
+    /** Bu iştirakçıya tələbə endirimi tətbiq olunubmu. */
+    private Boolean studentDiscountApplied;
+
     /** Kassada (Kassa QR) təsdiqləndiyi an. */
     private LocalDateTime cashierVerifiedAt;
 

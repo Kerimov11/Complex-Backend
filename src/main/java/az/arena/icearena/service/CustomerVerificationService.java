@@ -1,6 +1,7 @@
 package az.arena.icearena.service;
 
 import az.arena.icearena.dto.customer.CustomerVerificationDto;
+import az.arena.icearena.dto.customer.TicketPhotosRequest;
 import az.arena.icearena.entity.User;
 import java.time.LocalDate;
 
@@ -15,6 +16,8 @@ public interface CustomerVerificationService {
                                          String finCode,
                                          String identityPhotoData,
                                          boolean confirmed);
+
+    CustomerVerificationDto saveTicketPhotos(String username, TicketPhotosRequest request);
 
     /**
      * Bilet almaq üçün müştərinin 18+ və şəxsiyyət vəsiqəsi təsdiqli

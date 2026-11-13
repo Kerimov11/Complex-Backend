@@ -1,16 +1,20 @@
 package az.arena.icearena.service.impl;
 
 import az.arena.icearena.dto.customer.CustomerVerificationDto;
+import az.arena.icearena.dto.customer.TicketPhotosRequest;
+import az.arena.icearena.entity.Reservation;
 import az.arena.icearena.entity.Role;
 import az.arena.icearena.entity.RoleName;
 import az.arena.icearena.entity.User;
 import az.arena.icearena.exception.BadRequestException;
 import az.arena.icearena.exception.ResourceNotFoundException;
+import az.arena.icearena.repository.ReservationRepository;
 import az.arena.icearena.repository.UserRepository;
 import az.arena.icearena.service.CustomerVerificationService;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Period;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -34,6 +38,7 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
             RoleName.ROLE_VOLUNTEER);
 
     private final UserRepository userRepository;
+    private final ReservationRepository reservationRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -122,6 +127,69 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
         user.setIdentityReviewedBy(null);
         user.setIdentityRejectionReason(null);
         userRepository.save(user);
+        return toDto(user);
+    }
+
+    @Override
+    @Transactional
+    public CustomerVerificationDto saveTicketPhotos(String username, TicketPhotosRequest request) {
+        User user = findUser(username);
+        if (request == null || request.getVoucherCode() == null || request.getVoucherCode().isBlank()) {
+            throw new BadRequestException("Bilet kodu tələb olunur.");
+        }
+        List<Reservation> reservations = reservationRepository
+                .findByVoucherCodeIgnoreCase(request.getVoucherCode().trim());
+        if (reservations.isEmpty()) {
+            throw new ResourceNotFoundException("Bilet tapılmadı.");
+        }
+
+        List<TicketPhotosRequest.ParticipantPhoto> items =
+                request.getParticipants() == null ? List.of() : request.getParticipants();
+        boolean anyPhotoSubmitted = false;
+
+        for (int i = 0; i < reservations.size(); i++) {
+            Reservation reservation = reservations.get(i);
+            if (reservation.getUser() == null
+                    || !reservation.getUser().getId().equals(user.getId())) {
+                continue;
+            }
+            TicketPhotosRequest.ParticipantPhoto match = items.stream()
+                    .filter(p -> p.getReservationId() != null
+                            && p.getReservationId().equals(reservation.getId()))
+                    .findFirst()
+                    .orElse(i < items.size() ? items.get(i) : null);
+            if (match == null) {
+                continue;
+            }
+            if (match.getIdentityPhotoData() != null
+                    && match.getIdentityPhotoData().trim().startsWith("data:image/")) {
+                String idPhoto = match.getIdentityPhotoData().trim();
+                if (idPhoto.length() <= MAX_PHOTO_DATA_LENGTH) {
+                    reservation.setIdentityPhotoData(idPhoto);
+                    anyPhotoSubmitted = true;
+                }
+            }
+            if (match.getStudentCardPhotoData() != null
+                    && match.getStudentCardPhotoData().trim().startsWith("data:image/")) {
+                String stPhoto = match.getStudentCardPhotoData().trim();
+                if (stPhoto.length() <= MAX_PHOTO_DATA_LENGTH) {
+                    reservation.setStudentCardPhotoData(stPhoto);
+                    reservation.setStudentDiscountApplied(true);
+                    anyPhotoSubmitted = true;
+                }
+            } else if (Boolean.TRUE.equals(match.getStudentDiscountApplied())) {
+                reservation.setStudentDiscountApplied(true);
+            }
+            reservationRepository.save(reservation);
+        }
+
+        if (anyPhotoSubmitted) {
+            user.setIdentityReviewStatus("PENDING_REVIEW");
+            user.setIdentityReviewedAt(null);
+            user.setIdentityReviewedBy(null);
+            user.setIdentityRejectionReason(null);
+            userRepository.save(user);
+        }
         return toDto(user);
     }
 

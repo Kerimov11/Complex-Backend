@@ -1,21 +1,31 @@
 package az.arena.icearena.service.impl;
 
 import az.arena.icearena.dto.admin.IdentityVerificationAdminDto;
+import az.arena.icearena.entity.Payment;
+import az.arena.icearena.entity.PaymentStatus;
 import az.arena.icearena.entity.Reservation;
+import az.arena.icearena.entity.Session;
 import az.arena.icearena.entity.Skate;
 import az.arena.icearena.entity.User;
 import az.arena.icearena.exception.ResourceNotFoundException;
+import az.arena.icearena.repository.PaymentRepository;
 import az.arena.icearena.repository.ReservationRepository;
+import az.arena.icearena.repository.SessionRepository;
+import az.arena.icearena.repository.SkateRepository;
 import az.arena.icearena.repository.UserRepository;
 import az.arena.icearena.service.IdentityReviewService;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +36,9 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
 
     private final UserRepository userRepository;
     private final ReservationRepository reservationRepository;
+    private final PaymentRepository paymentRepository;
+    private final SessionRepository sessionRepository;
+    private final SkateRepository skateRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -65,7 +78,74 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
         user.setIdentityReviewedBy(reviewerUsername);
         user.setIdentityRejectionReason(cleanedReason);
         userRepository.save(user);
-        return toDto(user);
+
+        Set<Long> cancelledIds = new HashSet<>();
+        List<Reservation> userReservations = reservationRepository.findByUserId(userId);
+        for (Reservation reservation : userReservations) {
+            if (reservation.getCheckedInAt() != null
+                    || reservation.getStatus() == Reservation.Status.CANCELLED) {
+                continue;
+            }
+            reservation.setStatus(Reservation.Status.CANCELLED);
+            if (Boolean.TRUE.equals(reservation.getSkateStockDeducted())
+                    && reservation.getSkateHandedOutAt() == null
+                    && reservation.getSkate() != null) {
+                Skate skate = reservation.getSkate();
+                int avail = skate.getAvailableQuantity() == null ? 0 : skate.getAvailableQuantity();
+                skate.setAvailableQuantity(avail + 1);
+                skateRepository.save(skate);
+                reservation.setSkateStockDeducted(false);
+                reservation.setTimerExpiresAt(null);
+            }
+            if (reservation.getSession() != null) {
+                Session session = reservation.getSession();
+                int max = session.getMaxTicketLimit() == null ? Integer.MAX_VALUE : session.getMaxTicketLimit();
+                int avail = session.getAvailableTickets() == null ? 0 : session.getAvailableTickets();
+                session.setAvailableTickets(Math.min(max, avail + 1));
+                sessionRepository.save(session);
+            }
+            reservationRepository.save(reservation);
+            if (reservation.getId() != null) {
+                cancelledIds.add(reservation.getId());
+            }
+        }
+
+        BigDecimal refunded = BigDecimal.ZERO;
+        if (!cancelledIds.isEmpty()) {
+            List<Payment> payments = paymentRepository.findByUserId(userId);
+            for (Payment payment : payments) {
+                if (payment.getStatus() != PaymentStatus.SUCCESS) {
+                    continue;
+                }
+                if (matchesAnyReservation(payment.getReservationIds(), cancelledIds)) {
+                    payment.setStatus(PaymentStatus.REFUNDED);
+                    paymentRepository.save(payment);
+                    if (payment.getAmount() != null) {
+                        refunded = refunded.add(payment.getAmount());
+                    }
+                }
+            }
+        }
+
+        IdentityVerificationAdminDto dto = toDto(user);
+        dto.setRefundedAmount(refunded.compareTo(BigDecimal.ZERO) > 0 ? refunded : null);
+        return dto;
+    }
+
+    private boolean matchesAnyReservation(String reservationIdsCsv, Set<Long> targetIds) {
+        if (reservationIdsCsv == null || reservationIdsCsv.isBlank()) {
+            return false;
+        }
+        return Arrays.stream(reservationIdsCsv.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .anyMatch(s -> {
+                    try {
+                        return targetIds.contains(Long.parseLong(s));
+                    } catch (NumberFormatException ex) {
+                        return false;
+                    }
+                });
     }
 
     private IdentityVerificationAdminDto toDto(User user) {
@@ -123,6 +203,18 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
                 .min(LocalDateTime::compareTo)
                 .orElse(null);
 
+        List<IdentityVerificationAdminDto.ParticipantPhotoSummary> participantPhotos = group.stream()
+                .map(r -> IdentityVerificationAdminDto.ParticipantPhotoSummary.builder()
+                        .reservationId(r.getId())
+                        .participantName(r.getParticipantName())
+                        .participantAge(r.getParticipantAge())
+                        .skateSize(r.getSkate() != null ? r.getSkate().getDisplaySize() : null)
+                        .identityPhotoData(r.getIdentityPhotoData())
+                        .studentCardPhotoData(r.getStudentCardPhotoData())
+                        .studentDiscountApplied(Boolean.TRUE.equals(r.getStudentDiscountApplied()))
+                        .build())
+                .toList();
+
         return IdentityVerificationAdminDto.TicketSummary.builder()
                 .ticketCode(code)
                 .sessionDate(first.getSession() != null ? first.getSession().getSessionDate() : null)
@@ -131,6 +223,7 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
                 .skateSizes(sizes)
                 .status(first.getStatus() != null ? first.getStatus().name() : null)
                 .purchaseDate(purchaseDate)
+                .participantPhotos(participantPhotos)
                 .build();
     }
 }

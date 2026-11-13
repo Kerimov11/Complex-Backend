@@ -1,5 +1,6 @@
 package az.arena.icearena.dto.admin;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -29,6 +30,7 @@ public class IdentityVerificationAdminDto {
     private LocalDateTime identityReviewedAt;
     private String identityReviewedBy;
     private String identityRejectionReason;
+    private BigDecimal refundedAmount;
 
     @Builder.Default
     private List<TicketSummary> tickets = new ArrayList<>();
@@ -46,5 +48,21 @@ public class IdentityVerificationAdminDto {
         private List<String> skateSizes = new ArrayList<>();
         private String status;
         private LocalDateTime purchaseDate;
+        @Builder.Default
+        private List<ParticipantPhotoSummary> participantPhotos = new ArrayList<>();
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class ParticipantPhotoSummary {
+        private Long reservationId;
+        private String participantName;
+        private Integer participantAge;
+        private String skateSize;
+        private String identityPhotoData;
+        private String studentCardPhotoData;
+        private Boolean studentDiscountApplied;
     }
 }

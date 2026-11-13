@@ -3,6 +3,7 @@ package az.arena.icearena.controller.client;
 import az.arena.icearena.dto.customer.AgeVerificationRequest;
 import az.arena.icearena.dto.customer.CustomerVerificationDto;
 import az.arena.icearena.dto.customer.IdentityVerificationRequest;
+import az.arena.icearena.dto.customer.TicketPhotosRequest;
 import az.arena.icearena.service.CustomerVerificationService;
 import jakarta.validation.Valid;
 import java.security.Principal;
@@ -10,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -49,5 +51,13 @@ public class CustomerVerificationController {
                 request.getFinCode(),
                 request.getIdentityPhotoData(),
                 Boolean.TRUE.equals(request.getConfirmed())));
+    }
+
+    @PostMapping("/ticket-photos")
+    public ResponseEntity<CustomerVerificationDto> saveTicketPhotos(
+            @RequestBody TicketPhotosRequest request,
+            Principal principal) {
+        return ResponseEntity.ok(verificationService.saveTicketPhotos(
+                principal.getName(), request));
     }
 }

@@ -202,6 +202,7 @@ public class PaymentServiceImpl implements PaymentService {
                 .durationMinutes(duration)
                 .quantity(reservations.size())
                 .student(request.getStudent())
+                .studentCount(request.getStudentCount())
                 .family(request.getFamily())
                 .push30(request.getPush30())
                 .qazi(request.getQazi())

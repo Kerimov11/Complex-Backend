@@ -41,6 +41,8 @@ public class DiscountRequest {
 
     /** Sosial güzəşt hüququ: tələbə. */
     private Boolean student;
+    /** Qrup sifarişində tələbə olan iştirakçı sayı (null olduqda hamısı). */
+    private Integer studentCount;
     /** Sosial güzəşt hüququ: ailə. */
     private Boolean family;
     /** PUSH30 premium paketi. */
