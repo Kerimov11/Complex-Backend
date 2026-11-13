@@ -15,4 +15,13 @@ public class SkateStockRequest {
 
     @Min(value = 0, message = "Say mənfi ola bilməz")
     private Integer quantity;
+
+    @Min(value = 0, message = "Ümumi say mənfi ola bilməz")
+    private Integer totalQuantity;
+
+    @Min(value = 0, message = "Mövcud say mənfi ola bilməz")
+    private Integer availableQuantity;
+
+    @Min(value = 0, message = "Zədəli say mənfi ola bilməz")
+    private Integer damagedQuantity;
 }

@@ -54,6 +54,45 @@ public class SkateAdminServiceImpl implements SkateAdminService {
 
     @Override
     @Transactional
+    public SkateDto updateStock(Long id, SkateStockRequest request) {
+        Skate skate = findSkate(id);
+
+        if (request.getSize() != null && request.getSize() > 0 && !request.getSize().equals(skate.getSize())) {
+            if (skateRepository.findBySize(request.getSize()).isPresent()) {
+                throw new BadRequestException("Bu ölçü artıq mövcuddur: " + request.getSize());
+            }
+            skate.setSize(request.getSize());
+        }
+
+        int currentTotal = value(skate.getTotalQuantity());
+        int currentAvailable = value(skate.getAvailableQuantity());
+        int currentInUse = Math.max(0, currentTotal - currentAvailable);
+
+        if (request.getTotalQuantity() != null) {
+            int newTotal = Math.max(0, request.getTotalQuantity());
+            skate.setTotalQuantity(newTotal);
+            if (request.getAvailableQuantity() != null) {
+                skate.setAvailableQuantity(Math.max(0, Math.min(newTotal, request.getAvailableQuantity())));
+            } else {
+                skate.setAvailableQuantity(Math.max(0, newTotal - currentInUse));
+            }
+        } else if (request.getQuantity() != null) {
+            int newTotal = Math.max(0, request.getQuantity());
+            skate.setTotalQuantity(newTotal);
+            skate.setAvailableQuantity(Math.max(0, newTotal - currentInUse));
+        } else if (request.getAvailableQuantity() != null) {
+            skate.setAvailableQuantity(Math.max(0, request.getAvailableQuantity()));
+        }
+
+        if (request.getDamagedQuantity() != null) {
+            skate.setDamagedQuantity(Math.max(0, request.getDamagedQuantity()));
+        }
+
+        return toDto(skateRepository.save(skate));
+    }
+
+    @Override
+    @Transactional
     public SkateDto restock(Long id, int quantity) {
         if (quantity <= 0) {
             throw new BadRequestException("Əlavə olunacaq say 0-dan böyük olmalıdır.");

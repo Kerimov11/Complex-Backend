@@ -9,6 +9,8 @@ public interface SkateAdminService {
 
     SkateDto create(SkateStockRequest request);
 
+    SkateDto updateStock(Long id, SkateStockRequest request);
+
     SkateDto restock(Long id, int quantity);
 
     SkateDto writeOff(Long id, int quantity);
