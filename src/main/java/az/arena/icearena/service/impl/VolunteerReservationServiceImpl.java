@@ -45,9 +45,14 @@ public class VolunteerReservationServiceImpl implements VolunteerReservationServ
     }
 
     private boolean isVisibleForVolunteer(Reservation reservation) {
-        return reservation != null
-                && reservation.getStatus() != Reservation.Status.CANCELLED
-                && reservation.getSkateHandedOutAt() == null;
+        if (reservation == null
+                || reservation.getStatus() != Reservation.Status.CONFIRMED
+                || reservation.getSkateHandedOutAt() != null) {
+            return false;
+        }
+        boolean pendingReview = "PENDING_REVIEW".equals(reservation.getReviewStatus())
+                || (reservation.getUser() != null && "PENDING_REVIEW".equals(reservation.getUser().getIdentityReviewStatus()));
+        return !pendingReview;
     }
 
     @Override
@@ -59,6 +64,8 @@ public class VolunteerReservationServiceImpl implements VolunteerReservationServ
                 .findBySkateStockDeductedTrueAndSkateHandedOutAtIsNullAndTimerExpiresAtAfterOrderByTimerExpiresAtAsc(
                         now)
                 .stream()
+                .filter(r -> !"PENDING_REVIEW".equals(r.getReviewStatus())
+                        && (r.getUser() == null || !"PENDING_REVIEW".equals(r.getUser().getIdentityReviewStatus())))
                 .map(this::toDto)
                 .toList();
     }
@@ -116,6 +123,10 @@ public class VolunteerReservationServiceImpl implements VolunteerReservationServ
         if (reservation.getStatus() != Reservation.Status.CONFIRMED) {
             throw new BadRequestException(
                     "Yalnız təsdiqlənmiş rezervasiya üçün konki hazırlana bilər.");
+        }
+        if ("PENDING_REVIEW".equals(reservation.getReviewStatus())
+                || (reservation.getUser() != null && "PENDING_REVIEW".equals(reservation.getUser().getIdentityReviewStatus()))) {
+            throw new BadRequestException("Bilet kassir tərəfindən hələ təsdiqlənməyib. Konki təhvil verilə bilməz.");
         }
         if (reservation.getSkateHandedOutAt() != null) {
             throw new BadRequestException("Konki artıq təhvil verilib.");

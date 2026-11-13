@@ -56,12 +56,15 @@ public class VerificationServiceImpl implements VerificationService {
 
         List<Reservation> reservations = findReservations(code);
         if (!reservations.isEmpty()) {
-            User owner = reservations.get(0).getUser();
-            if (owner != null && "PENDING_REVIEW".equals(owner.getIdentityReviewStatus())) {
+            Reservation first = reservations.get(0);
+            User owner = first.getUser();
+            String ticketReview = first.getReviewStatus();
+            String userReview = owner != null ? owner.getIdentityReviewStatus() : null;
+            if ("PENDING_REVIEW".equals(ticketReview) || "PENDING_REVIEW".equals(userReview)) {
                 return reservationBuilder(reservations, normalized)
                         .valid(false)
                         .status("IDENTITY_PENDING")
-                        .message("Müştərinin ilk bilet üzrə şəxsiyyət və foto təsdiqi hələ kassir tərəfindən təsdiqlənməyib.")
+                        .message("Bilet kassir tərəfindən hələ təsdiqlənməyib. Turniketdən giriş qadağandır.")
                         .build();
             }
             if (owner != null && "REJECTED".equals(owner.getIdentityReviewStatus())) {
@@ -140,12 +143,15 @@ public class VerificationServiceImpl implements VerificationService {
         }
         List<Reservation> reservations = findReservations(code);
         if (!reservations.isEmpty()) {
-            User owner = reservations.get(0).getUser();
-            if (owner != null && "PENDING_REVIEW".equals(owner.getIdentityReviewStatus())) {
+            Reservation first = reservations.get(0);
+            User owner = first.getUser();
+            String ticketReview = first.getReviewStatus();
+            String userReview = owner != null ? owner.getIdentityReviewStatus() : null;
+            if ("PENDING_REVIEW".equals(ticketReview) || "PENDING_REVIEW".equals(userReview)) {
                 return reservationBuilder(reservations, normalized)
                         .valid(false)
                         .status("IDENTITY_PENDING")
-                        .message("Müştərinin ilk bilet üzrə şəxsiyyət və foto təsdiqi hələ kassir tərəfindən təsdiqlənməyib.")
+                        .message("Bilet kassir tərəfindən hələ təsdiqlənməyib. Turniketdən giriş qadağandır.")
                         .build();
             }
             if (owner != null && "REJECTED".equals(owner.getIdentityReviewStatus())) {
