@@ -51,6 +51,7 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
                 : userRepository.findByIdentityReviewStatusOrderByIdentityConfirmedAtDesc(normalized);
 
         List<Reservation> ticketReservations = reservationRepository.findAll().stream()
+                .filter(r -> r.getStatus() == Reservation.Status.CONFIRMED)
                 .filter(r -> {
                     String effectiveStatus = r.getReviewStatus();
                     if (effectiveStatus == null && hasAnyTicketDocument(r)) {

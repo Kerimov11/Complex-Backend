@@ -163,6 +163,10 @@ public class TicketServiceImpl implements TicketService {
     private List<TicketDto> reservationGroups(Long userId) {
         Map<String, List<Reservation>> groups = new LinkedHashMap<>();
         for (Reservation reservation : reservationRepository.findByUserId(userId)) {
+            // Ödənişi tamamlanmamış (PENDING) sifarişlər "Biletlərim" bölməsinə düşməməlidir.
+            if (reservation.getStatus() == Reservation.Status.PENDING) {
+                continue;
+            }
             String code = reservation.getVoucherCode();
             if (code == null || code.isBlank()) {
                 code = "RES-" + reservation.getId();
@@ -171,6 +175,7 @@ public class TicketServiceImpl implements TicketService {
         }
         return groups.entrySet().stream()
                 .map(entry -> reservationGroupToDto(entry.getKey(), entry.getValue()))
+                .filter(dto -> !"PENDING".equals(dto.getStatus()))
                 .toList();
     }
 
