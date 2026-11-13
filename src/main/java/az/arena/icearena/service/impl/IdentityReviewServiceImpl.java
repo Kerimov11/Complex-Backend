@@ -226,6 +226,9 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
                 .familyIdsPhotoData(first.getFamilyIdsPhotoData())
                 .push30ScreenshotData(first.getPush30ScreenshotData())
                 .push30Phone(first.getPush30Phone())
+                .qaziDocumentPhotoData(first.getQaziDocumentPhotoData())
+                .qaziFullName(first.getQaziFullName())
+                .shaheedDocumentPhotoData(first.getShaheedDocumentPhotoData())
                 .participantPhotos(participantPhotos)
                 .build();
     }

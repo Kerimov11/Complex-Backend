@@ -104,6 +104,20 @@ public class PaymentServiceImpl implements PaymentService {
             }
         }
 
+        if (Boolean.TRUE.equals(request.getQazi())) {
+            String normalizedQazi = normalizeFullName(request.getQaziFullName());
+            if (normalizedQazi.isEmpty()) {
+                throw new BadRequestException("Qazi endirimi üçün ad və soyad tələb olunur.");
+            }
+            long usedVisits = reservationRepository.countDistinctQaziVisits(
+                    normalizedQazi, Reservation.Status.CANCELLED);
+            if (usedVisits >= 2) {
+                throw new BadRequestException(
+                        "Bu ad və soyadla Qazi endirimindən artıq 2 dəfə istifadə olunub.");
+            }
+            request.setQaziVisits((int) usedVisits);
+        }
+
         List<Long> reservationIds = request.getReservationIds() == null
                 ? List.of()
                 : request.getReservationIds().stream().filter(id -> id != null).toList();
@@ -222,6 +236,7 @@ public class PaymentServiceImpl implements PaymentService {
                 .qazi(request.getQazi())
                 .qaziVisits(request.getQaziVisits())
                 .shaheed(request.getShaheed())
+                .shaheedCount(request.getShaheedCount())
                 .shaheedVerified(request.getShaheedVerified())
                 .build();
 
@@ -261,6 +276,13 @@ public class PaymentServiceImpl implements PaymentService {
             throw new BadRequestException("Bu ödəniş sizə aid deyil.");
         }
         return payment;
+    }
+
+    private String normalizeFullName(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim().replaceAll("\\s+", " ").toUpperCase(java.util.Locale.ROOT);
     }
 
     private void applyStatus(Payment payment, PaymentStatus status) {

@@ -51,6 +51,9 @@ public class IdentityVerificationAdminDto {
         private String familyIdsPhotoData;
         private String push30ScreenshotData;
         private String push30Phone;
+        private String qaziDocumentPhotoData;
+        private String qaziFullName;
+        private String shaheedDocumentPhotoData;
         @Builder.Default
         private List<ParticipantPhotoSummary> participantPhotos = new ArrayList<>();
     }

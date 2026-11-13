@@ -67,4 +67,13 @@ public class CustomerVerificationController {
         return ResponseEntity.ok(java.util.Map.of(
                 "used", verificationService.isPush30PhoneUsed(phone)));
     }
+
+    @GetMapping("/qazi-check")
+    public ResponseEntity<java.util.Map<String, Object>> checkQaziFullName(
+            @org.springframework.web.bind.annotation.RequestParam String fullName) {
+        long visits = verificationService.getQaziVisitCount(fullName);
+        return ResponseEntity.ok(java.util.Map.of(
+                "visits", visits,
+                "remaining", Math.max(0L, 2L - visits)));
+    }
 }

@@ -153,6 +153,12 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
                 ? "" : request.getPush30ScreenshotData().trim();
         String push30Phone = request.getPush30Phone() == null
                 ? "" : request.getPush30Phone().replaceAll("[^0-9]", "");
+        String qaziPhoto = request.getQaziDocumentPhotoData() == null
+                ? "" : request.getQaziDocumentPhotoData().trim();
+        String qaziFullName = request.getQaziFullName() == null
+                ? "" : request.getQaziFullName().trim().replaceAll("\\s+", " ").toUpperCase(Locale.ROOT);
+        String shaheedPhoto = request.getShaheedDocumentPhotoData() == null
+                ? "" : request.getShaheedDocumentPhotoData().trim();
 
         if (!push30Phone.isEmpty()) {
             boolean usedElsewhere = reservationRepository.existsByPush30PhoneAndStatusNot(
@@ -180,6 +186,17 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
             }
             if (!push30Phone.isEmpty()) {
                 reservation.setPush30Phone(push30Phone);
+            }
+            if (qaziPhoto.startsWith("data:image/") && qaziPhoto.length() <= MAX_PHOTO_DATA_LENGTH) {
+                reservation.setQaziDocumentPhotoData(qaziPhoto);
+                anyPhotoSubmitted = true;
+            }
+            if (!qaziFullName.isEmpty()) {
+                reservation.setQaziFullName(qaziFullName);
+            }
+            if (shaheedPhoto.startsWith("data:image/") && shaheedPhoto.length() <= MAX_PHOTO_DATA_LENGTH) {
+                reservation.setShaheedDocumentPhotoData(shaheedPhoto);
+                anyPhotoSubmitted = true;
             }
             TicketPhotosRequest.ParticipantPhoto match = items.stream()
                     .filter(p -> p.getReservationId() != null
@@ -229,6 +246,17 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
             return false;
         }
         return reservationRepository.existsByPush30PhoneAndStatusNot(
+                normalized, Reservation.Status.CANCELLED);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long getQaziVisitCount(String fullName) {
+        if (fullName == null || fullName.isBlank()) {
+            return 0L;
+        }
+        String normalized = fullName.trim().replaceAll("\\s+", " ").toUpperCase(Locale.ROOT);
+        return reservationRepository.countDistinctQaziVisits(
                 normalized, Reservation.Status.CANCELLED);
     }
 

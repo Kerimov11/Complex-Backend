@@ -72,12 +72,16 @@ public class DiscountServiceImpl implements DiscountService {
 
         List<Candidate> candidates = new ArrayList<>();
 
-        // 1) Şəhid ailəsi — bütün biletlər pulsuz (təsdiq tələb olunur).
+        // 1) Şəhid ailəsi — seçilmiş sayda iştirakçı pulsuz (təsdiq tələb olunur).
         if (Boolean.TRUE.equals(request.getShaheed())
                 && Boolean.TRUE.equals(request.getShaheedVerified())) {
-            int free = Math.max(1, value(shaheedRule.getFreeTickets(), 1));
-            candidates.add(freeCandidate(DiscountType.SHAHEED,
-                    "Şəhid ailələri — pulsuz giriş", unit, qty, free));
+            int sCount = request.getShaheedCount() == null
+                    ? qty
+                    : Math.max(1, Math.min(qty, request.getShaheedCount()));
+            String label = sCount == qty
+                    ? "Şəhid ailələri — pulsuz giriş"
+                    : "Şəhid ailələri — " + sCount + "/" + qty + " nəfər pulsuz";
+            candidates.add(freeCandidate(DiscountType.SHAHEED, label, unit, qty, sCount));
         }
 
         // 2) Qazi — ilk giriş pulsuz, 2-ci giriş 50%.

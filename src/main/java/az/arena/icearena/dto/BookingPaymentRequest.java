@@ -41,6 +41,8 @@ public class BookingPaymentRequest {
     private String push30Phone;
     private Boolean qazi;
     private Integer qaziVisits;
+    private String qaziFullName;
     private Boolean shaheed;
+    private Integer shaheedCount;
     private Boolean shaheedVerified;
 }

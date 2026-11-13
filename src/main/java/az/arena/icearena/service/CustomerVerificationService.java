@@ -21,6 +21,8 @@ public interface CustomerVerificationService {
 
     boolean isPush30PhoneUsed(String phone);
 
+    long getQaziVisitCount(String fullName);
+
     /**
      * Bilet almaq üçün müştərinin 18+ və şəxsiyyət vəsiqəsi təsdiqli
      * olmasını yoxlayır. Staff rolları bu yoxlamadan azaddır.

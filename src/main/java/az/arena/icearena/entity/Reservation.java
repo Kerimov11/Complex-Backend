@@ -104,6 +104,18 @@ public class Reservation {
     @Column(length = 32)
     private String push30Phone;
 
+    /** Qazi endirimi üçün qazi sənədinin fotosu. */
+    @Column(columnDefinition = "TEXT")
+    private String qaziDocumentPhotoData;
+
+    /** Qazi endirimi üçün ad və soyad (maksimum 2 istifadə yoxlaması üçün). */
+    @Column(length = 120)
+    private String qaziFullName;
+
+    /** Şəhid ailəsi endirimi üçün təsdiqləyici sənəd fotosu. */
+    @Column(columnDefinition = "TEXT")
+    private String shaheedDocumentPhotoData;
+
     /** Kassada (Kassa QR) təsdiqləndiyi an. */
     private LocalDateTime cashierVerifiedAt;
 

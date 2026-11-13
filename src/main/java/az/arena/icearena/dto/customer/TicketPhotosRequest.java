@@ -18,6 +18,10 @@ public class TicketPhotosRequest {
     private String familyIdsPhotoData;
     private String push30ScreenshotData;
     private String push30Phone;
+    private String qaziDocumentPhotoData;
+    private String qaziFullName;
+    private String shaheedDocumentPhotoData;
+    private Integer shaheedCount;
 
     @Builder.Default
     private List<ParticipantPhoto> participants = new ArrayList<>();

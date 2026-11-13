@@ -53,6 +53,8 @@ public class DiscountRequest {
     private Integer qaziVisits;
     /** Şəhid ailəsi statusu. */
     private Boolean shaheed;
+    /** Şəhid ailəsi üzvü olan iştirakçı sayı. */
+    private Integer shaheedCount;
     /** Şəhidlik sənədi təsdiqli olub? */
     private Boolean shaheedVerified;
 }

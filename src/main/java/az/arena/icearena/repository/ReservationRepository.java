@@ -30,6 +30,10 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
     boolean existsByPush30PhoneAndStatusNot(String push30Phone, Reservation.Status status);
 
+    @Query("select count(distinct r.voucherCode) from Reservation r where upper(r.qaziFullName) = upper(:qaziFullName) and r.status <> :excludedStatus")
+    long countDistinctQaziVisits(@Param("qaziFullName") String qaziFullName,
+                                 @Param("excludedStatus") Reservation.Status excludedStatus);
+
     long countBySessionIdAndStatusIn(Long sessionId, Collection<Reservation.Status> statuses);
 
     long countBySessionIdAndSkateIdAndStatusIn(Long sessionId, Long skateId,
