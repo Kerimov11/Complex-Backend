@@ -50,9 +50,18 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
                 ? userRepository.findByIdentityReviewStatusIsNotNullOrderByIdentityConfirmedAtDesc()
                 : userRepository.findByIdentityReviewStatusOrderByIdentityConfirmedAtDesc(normalized);
 
-        List<Reservation> ticketReservations = isAll
-                ? reservationRepository.findByReviewStatusIsNotNullOrderByCreatedAtDesc()
-                : reservationRepository.findByReviewStatusOrderByCreatedAtDesc(normalized);
+        List<Reservation> ticketReservations = reservationRepository.findAll().stream()
+                .filter(r -> {
+                    String effectiveStatus = r.getReviewStatus();
+                    if (effectiveStatus == null && hasAnyTicketDocument(r)) {
+                        effectiveStatus = "PENDING_REVIEW";
+                    }
+                    if (effectiveStatus == null) {
+                        return false;
+                    }
+                    return isAll || normalized.equals(effectiveStatus);
+                })
+                .toList();
 
         Map<String, List<Reservation>> groupedTickets = new LinkedHashMap<>();
         for (Reservation r : ticketReservations) {
@@ -378,12 +387,16 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
                 .toList();
 
         IdentityVerificationAdminDto.TicketSummary summary = toTicketSummary(code, group);
+        String effectiveStatus = first.getReviewStatus();
+        if (effectiveStatus == null && group.stream().anyMatch(this::hasAnyTicketDocument)) {
+            effectiveStatus = "PENDING_REVIEW";
+        }
         return IdentityVerificationAdminDto.builder()
                 .userId(user != null ? user.getId() : null)
                 .itemType("TICKET")
                 .ticketCode(code)
                 .discountType(first.getDiscountType())
-                .reviewStatus(first.getReviewStatus())
+                .reviewStatus(effectiveStatus)
                 .reviewReason(first.getReviewReason())
                 .reviewedAt(first.getReviewedAt())
                 .reviewedBy(first.getReviewedBy())
@@ -399,5 +412,14 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
                 .identityReviewStatus(user != null ? user.getIdentityReviewStatus() : null)
                 .identityConfirmedAt(user != null ? user.getIdentityConfirmedAt() : null)
                 .build();
+    }
+
+    private boolean hasAnyTicketDocument(Reservation r) {
+        return (r.getFamilyIdsPhotoData() != null && !r.getFamilyIdsPhotoData().isBlank())
+                || (r.getPush30ScreenshotData() != null && !r.getPush30ScreenshotData().isBlank())
+                || (r.getQaziDocumentPhotoData() != null && !r.getQaziDocumentPhotoData().isBlank())
+                || (r.getShaheedDocumentPhotoData() != null && !r.getShaheedDocumentPhotoData().isBlank())
+                || (r.getStudentCardPhotoData() != null && !r.getStudentCardPhotoData().isBlank())
+                || (r.getIdentityPhotoData() != null && !r.getIdentityPhotoData().isBlank());
     }
 }
