@@ -25,6 +25,8 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
     public static final int ADULT_AGE = 18;
     private static final int MAX_AGE = 120;
     private static final Pattern DOCUMENT_PATTERN = Pattern.compile("^[A-Z0-9]{5,30}$");
+    private static final Pattern FIN_PATTERN = Pattern.compile("^[A-Z0-9]{7}$");
+    private static final int MAX_PHOTO_DATA_LENGTH = 6_000_000;
     private static final Set<RoleName> STAFF_ROLES = Set.of(
             RoleName.ROLE_ADMIN,
             RoleName.ROLE_COORDINATOR,
@@ -72,6 +74,8 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
     @Transactional
     public CustomerVerificationDto saveIdentity(String username,
                                                 String identityDocumentNumber,
+                                                String finCode,
+                                                String identityPhotoData,
                                                 boolean confirmed) {
         User user = findUser(username);
 
@@ -93,8 +97,30 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
                     "Şəxsiyyət vəsiqəsinin seriya və nömrəsini düzgün qeyd edin.");
         }
 
+        String normalizedFin = normalizeDocument(finCode);
+        if (!FIN_PATTERN.matcher(normalizedFin).matches()) {
+            throw new BadRequestException(
+                    "FİN kodu 7 simvoldan ibarət olmalıdır (məs: 5ABC123).");
+        }
+
+        String cleanedPhoto = identityPhotoData == null ? "" : identityPhotoData.trim();
+        if (!cleanedPhoto.startsWith("data:image/") || cleanedPhoto.length() < 100) {
+            throw new BadRequestException(
+                    "Şəxsiyyət vəsiqəsi ilə foto təsdiqi tələb olunur.");
+        }
+        if (cleanedPhoto.length() > MAX_PHOTO_DATA_LENGTH) {
+            throw new BadRequestException(
+                    "Yüklənən şəkil həddindən artıq böyükdür.");
+        }
+
         user.setIdentityDocumentNumber(normalized);
+        user.setFinCode(normalizedFin);
+        user.setIdentityPhotoData(cleanedPhoto);
         user.setIdentityConfirmedAt(LocalDateTime.now());
+        user.setIdentityReviewStatus("PENDING_REVIEW");
+        user.setIdentityReviewedAt(null);
+        user.setIdentityReviewedBy(null);
+        user.setIdentityRejectionReason(null);
         userRepository.save(user);
         return toDto(user);
     }
@@ -120,6 +146,10 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
                 || user.getIdentityDocumentNumber().isBlank()) {
             throw new BadRequestException(
                     "Bilet almaq üçün şəxsiyyət vəsiqəsini təsdiqləyin.");
+        }
+        if ("REJECTED".equals(user.getIdentityReviewStatus())) {
+            throw new BadRequestException(
+                    "Şəxsiyyət və foto təsdiqiniz rədd edilib. Zəhmət olmasa yeni foto yükləyin.");
         }
     }
 
@@ -159,15 +189,21 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
         boolean adult = ageVerified && age >= ADULT_AGE;
         boolean identityConfirmed = user.getIdentityConfirmedAt() != null
                 && user.getIdentityDocumentNumber() != null
-                && !user.getIdentityDocumentNumber().isBlank();
+                && !user.getIdentityDocumentNumber().isBlank()
+                && !"REJECTED".equals(user.getIdentityReviewStatus());
+        String reviewStatus = user.getIdentityReviewStatus();
 
         String message;
         if (!ageVerified) {
             message = "Yaş təsdiqi gözləyir.";
         } else if (!adult) {
             message = "18 yaşdan kiçik şəxslər bilet ala bilməz.";
+        } else if ("REJECTED".equals(reviewStatus)) {
+            message = "Şəxsiyyət təsdiqi rədd edilib. Zəhmət olmasa yeni foto yükləyin.";
         } else if (!identityConfirmed) {
             message = "Bilet almaq üçün şəxsiyyət vəsiqəsini təsdiqləyin.";
+        } else if ("PENDING_REVIEW".equals(reviewStatus)) {
+            message = "Şəxsiyyət və foto məlumatlarınız kassir təsdiqini gözləyir.";
         } else {
             message = "Yaş və şəxsiyyət vəsiqəsi təsdiqlənib.";
         }
@@ -180,6 +216,10 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
                 .identityConfirmed(identityConfirmed)
                 .identityConfirmedAt(user.getIdentityConfirmedAt())
                 .identityDocumentLast4(lastFour(user.getIdentityDocumentNumber()))
+                .finCode(user.getFinCode())
+                .identityReviewStatus(reviewStatus)
+                .identityRejectionReason(user.getIdentityRejectionReason())
+                .hasIdentityPhoto(user.getIdentityPhotoData() != null && !user.getIdentityPhotoData().isBlank())
                 .message(message)
                 .build();
     }

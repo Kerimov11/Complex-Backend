@@ -305,6 +305,8 @@ public class TicketServiceImpl implements TicketService {
                 .checkedOutAt(checkedOutAt)
                 .iceEntryTime(iceEntryTime)
                 .iceExitTime(iceExitTime)
+                .identityReviewStatus(first.getUser() != null ? first.getUser().getIdentityReviewStatus() : null)
+                .identityRejectionReason(first.getUser() != null ? first.getUser().getIdentityRejectionReason() : null)
                 .build();
     }
 

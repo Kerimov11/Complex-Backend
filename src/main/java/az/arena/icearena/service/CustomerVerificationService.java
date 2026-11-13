@@ -12,6 +12,8 @@ public interface CustomerVerificationService {
 
     CustomerVerificationDto saveIdentity(String username,
                                          String identityDocumentNumber,
+                                         String finCode,
+                                         String identityPhotoData,
                                          boolean confirmed);
 
     /**

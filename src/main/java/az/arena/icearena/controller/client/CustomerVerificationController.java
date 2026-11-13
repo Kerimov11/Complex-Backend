@@ -46,6 +46,8 @@ public class CustomerVerificationController {
         return ResponseEntity.ok(verificationService.saveIdentity(
                 principal.getName(),
                 request.getIdentityDocumentNumber(),
+                request.getFinCode(),
+                request.getIdentityPhotoData(),
                 Boolean.TRUE.equals(request.getConfirmed())));
     }
 }

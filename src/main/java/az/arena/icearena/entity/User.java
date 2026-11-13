@@ -70,6 +70,29 @@ public class User {
     @Column(length = 30)
     private String identityDocumentNumber;
 
+    @JsonIgnore
+    @ToString.Exclude
+    @Column(length = 16)
+    private String finCode;
+
+    @JsonIgnore
+    @ToString.Exclude
+    @Column(columnDefinition = "TEXT")
+    private String identityPhotoData;
+
+    /** NONE / PENDING_REVIEW / APPROVED / REJECTED */
+    @Column(length = 32)
+    private String identityReviewStatus;
+
+    @Column
+    private LocalDateTime identityReviewedAt;
+
+    @Column(length = 64)
+    private String identityReviewedBy;
+
+    @Column(length = 500)
+    private String identityRejectionReason;
+
     @Column
     private LocalDateTime identityConfirmedAt;
 

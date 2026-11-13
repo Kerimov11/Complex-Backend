@@ -56,4 +56,6 @@ public class TicketDto {
     private LocalDateTime checkedOutAt;
     private String iceEntryTime;
     private String iceExitTime;
+    private String identityReviewStatus;
+    private String identityRejectionReason;
 }

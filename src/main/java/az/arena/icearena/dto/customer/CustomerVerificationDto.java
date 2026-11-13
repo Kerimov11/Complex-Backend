@@ -23,5 +23,9 @@ public class CustomerVerificationDto {
     private Boolean identityConfirmed;
     private LocalDateTime identityConfirmedAt;
     private String identityDocumentLast4;
+    private String finCode;
+    private String identityReviewStatus;
+    private String identityRejectionReason;
+    private Boolean hasIdentityPhoto;
     private String message;
 }

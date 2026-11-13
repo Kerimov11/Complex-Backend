@@ -18,6 +18,13 @@ public class IdentityVerificationRequest {
     @Size(min = 5, max = 30, message = "Şəxsiyyət vəsiqəsinin nömrəsi 5-30 simvol olmalıdır.")
     private String identityDocumentNumber;
 
+    @NotBlank(message = "FİN kod tələb olunur.")
+    @Size(min = 7, max = 16, message = "FİN kod 7 simvol olmalıdır.")
+    private String finCode;
+
+    @NotBlank(message = "Şəxsiyyət vəsiqəsi ilə foto təsdiqi tələb olunur.")
+    private String identityPhotoData;
+
     @NotNull(message = "Şəxsiyyət vəsiqəsi təsdiqi tələb olunur.")
     private Boolean confirmed;
 }
