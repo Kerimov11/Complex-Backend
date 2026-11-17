@@ -8,20 +8,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import az.arena.icearena.dto.admin.ActiveGuestDto;
 import az.arena.icearena.dto.admin.ActiveGuestsDto;
 import az.arena.icearena.dto.admin.VerificationResultDto;
+import az.arena.icearena.entity.Payment;
+import az.arena.icearena.entity.PaymentMethod;
+import az.arena.icearena.entity.PaymentStatus;
 import az.arena.icearena.entity.Reservation;
 import az.arena.icearena.entity.Session;
 import az.arena.icearena.entity.Skate;
 import az.arena.icearena.entity.User;
+import az.arena.icearena.repository.PaymentRepository;
 import az.arena.icearena.repository.ReservationRepository;
 import az.arena.icearena.repository.SessionRepository;
 import az.arena.icearena.repository.SkateRepository;
 import az.arena.icearena.repository.UserRepository;
 import az.arena.icearena.service.ReservationActivationService;
 import az.arena.icearena.service.VerificationService;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -37,6 +44,8 @@ class VerificationServiceTest {
     private ReservationActivationService activationService;
     @Autowired
     private ReservationRepository reservationRepository;
+    @Autowired
+    private PaymentRepository paymentRepository;
     @Autowired
     private UserRepository userRepository;
     @Autowired
@@ -69,10 +78,11 @@ class VerificationServiceTest {
                 .build());
 
         String voucher = "VERIFICATION-TEST-GROUP";
-        reservationRepository.saveAll(List.of(
+        List<Reservation> savedGroup = reservationRepository.saveAll(List.of(
                 reservation(user, session, skate, voucher, "Aysel", 22),
                 reservation(user, session, skate, voucher, "Murad", 19)
         ));
+        saveSuccessfulPayment(user, savedGroup);
 
         VerificationResultDto beforeScan = verificationService.handover(voucher, "volunteer");
         assertFalse(beforeScan.isValid());
@@ -143,6 +153,7 @@ class VerificationServiceTest {
         String voucher = "VERIFICATION-EXPIRY-GROUP";
         Reservation reservation = reservationRepository.save(
                 reservation(user, session, skate, voucher, "Expiry Test", 22));
+        saveSuccessfulPayment(user, List.of(reservation));
 
         activationService.activateByCode(voucher, user.getUsername(), false);
         assertEquals(4, available(skate));
@@ -199,10 +210,11 @@ class VerificationServiceTest {
                 .build());
 
         String voucher = "VERIFICATION-STOCK-GROUP";
-        reservationRepository.saveAll(List.of(
+        List<Reservation> stockGroup = reservationRepository.saveAll(List.of(
                 reservation(user, session, inStock, voucher, "Stok Var", 22),
                 reservation(user, session, outOfStock, voucher, "Stok Yox", 20)
         ));
+        saveSuccessfulPayment(user, stockGroup);
 
         verificationService.lookup(voucher, "cashier");
         VerificationResultDto scanned = verificationService.verify(voucher, "volunteer");
@@ -240,6 +252,7 @@ class VerificationServiceTest {
                 reservation(user, session, skate, voucher, "Aktiv Test", 22));
         saved.setEntryTime(LocalTime.now());
         reservationRepository.save(saved);
+        saveSuccessfulPayment(user, List.of(saved));
 
         ActiveGuestsDto initial = verificationService.activeGuests();
         assertTrue(initial.getActiveTickets().stream()
@@ -270,6 +283,92 @@ class VerificationServiceTest {
         assertTrue(onIce.getMinutesRemaining() > 0);
         assertTrue(after.getActiveTickets().stream()
                 .noneMatch(guest -> voucher.equals(guest.getCode())));
+    }
+
+    @Test
+    void unpaidOrRejectedReservationsCannotBeScannedAndStatusIsNotMutated() {
+        User user = userRepository.save(User.builder()
+                .username("verification-security-user")
+                .email("verification-security-user@icearena.az")
+                .password("x")
+                .firstName("Security")
+                .lastName("Test")
+                .build());
+        Session session = sessionRepository.save(Session.builder()
+                .sessionDate(LocalDate.now().plusDays(1))
+                .startTime(LocalTime.of(10, 0))
+                .endTime(LocalTime.of(23, 0))
+                .maxTicketLimit(100)
+                .availableTickets(100)
+                .blocked(false)
+                .build());
+        Skate skate = skateRepository.save(Skate.builder()
+                .size(993)
+                .totalQuantity(5)
+                .availableQuantity(5)
+                .damagedQuantity(0)
+                .build());
+
+        // 1. Ödənilməmiş (PENDING) rezervasiya
+        String unpaidVoucher = "UNPAID-VOUCHER-1";
+        Reservation unpaid = reservation(user, session, skate, unpaidVoucher, "Unpaid User", 21);
+        unpaid.setStatus(Reservation.Status.PENDING);
+        unpaid = reservationRepository.save(unpaid);
+
+        VerificationResultDto unpaidLookup = verificationService.lookup(unpaidVoucher, "cashier");
+        assertFalse(unpaidLookup.isValid());
+        assertEquals("PAYMENT_PENDING", unpaidLookup.getStatus());
+        assertEquals(Reservation.Status.PENDING,
+                reservationRepository.findById(unpaid.getId()).orElseThrow().getStatus());
+
+        VerificationResultDto unpaidVerify = verificationService.verify(unpaidVoucher, "volunteer");
+        assertFalse(unpaidVerify.isValid());
+        assertEquals("PAYMENT_PENDING", unpaidVerify.getStatus());
+        assertEquals(Reservation.Status.PENDING,
+                reservationRepository.findById(unpaid.getId()).orElseThrow().getStatus());
+
+        // 2. Kassir tərəfindən rədd edilmiş və geri ödənilmiş (REJECTED + CANCELLED + REFUNDED) bilet
+        String rejectedVoucher = "REJECTED-VOUCHER-1";
+        Reservation rejected = reservation(user, session, skate, rejectedVoucher, "Rejected User", 23);
+        rejected.setStatus(Reservation.Status.CANCELLED);
+        rejected.setReviewStatus("REJECTED");
+        rejected = reservationRepository.save(rejected);
+        paymentRepository.save(Payment.builder()
+                .transactionId("TX-REFUND-" + UUID.randomUUID())
+                .user(user)
+                .amount(new BigDecimal("25.00"))
+                .paymentMethod(PaymentMethod.CARD)
+                .status(PaymentStatus.REFUNDED)
+                .paymentDate(LocalDateTime.now())
+                .reservationIds(String.valueOf(rejected.getId()))
+                .build());
+
+        VerificationResultDto rejectedLookup = verificationService.lookup(rejectedVoucher, "cashier");
+        assertFalse(rejectedLookup.isValid());
+        assertEquals("IDENTITY_REJECTED", rejectedLookup.getStatus());
+        assertEquals(Reservation.Status.CANCELLED,
+                reservationRepository.findById(rejected.getId()).orElseThrow().getStatus());
+
+        VerificationResultDto rejectedVerify = verificationService.verify(rejectedVoucher, "volunteer");
+        assertFalse(rejectedVerify.isValid());
+        assertEquals("IDENTITY_REJECTED", rejectedVerify.getStatus());
+        assertEquals(Reservation.Status.CANCELLED,
+                reservationRepository.findById(rejected.getId()).orElseThrow().getStatus());
+    }
+
+    private void saveSuccessfulPayment(User user, List<Reservation> reservations) {
+        String ids = reservations.stream()
+                .map(r -> String.valueOf(r.getId()))
+                .collect(Collectors.joining(","));
+        paymentRepository.save(Payment.builder()
+                .transactionId("TX-TEST-" + UUID.randomUUID())
+                .user(user)
+                .amount(new BigDecimal("25.00"))
+                .paymentMethod(PaymentMethod.CARD)
+                .status(PaymentStatus.SUCCESS)
+                .paymentDate(LocalDateTime.now())
+                .reservationIds(ids)
+                .build());
     }
 
     private int available(Skate skate) {

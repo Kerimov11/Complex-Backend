@@ -27,6 +27,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
@@ -50,10 +51,12 @@ public class DataInitializer {
     private final SkateRepository skateRepository;
     private final DiscountRuleRepository discountRuleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JdbcTemplate jdbcTemplate;
 
     @Bean
     public CommandLineRunner seedDatabase() {
         return args -> {
+            migratePaymentStatusColumn();
             seedRoles();
             seedDemoUser();
             seedAdminUser();
@@ -67,6 +70,21 @@ public class DataInitializer {
                     sessionRepository.count(), shiftSlotRepository.count(),
                     skateRepository.count(), discountRuleRepository.count());
         };
+    }
+
+    private void migratePaymentStatusColumn() {
+        try {
+            jdbcTemplate.execute("ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_status_check");
+        } catch (Exception ignored) {
+        }
+        try {
+            jdbcTemplate.execute("ALTER TABLE payments ALTER COLUMN status TYPE VARCHAR(20)");
+        } catch (Exception ignored) {
+            try {
+                jdbcTemplate.execute("ALTER TABLE payments ALTER COLUMN status VARCHAR(20)");
+            } catch (Exception ignored2) {
+            }
+        }
     }
 
     private void seedRoles() {

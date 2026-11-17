@@ -5,6 +5,7 @@ import az.arena.icearena.dto.admin.ActiveGuestsDto;
 import az.arena.icearena.dto.admin.VerificationParticipantDto;
 import az.arena.icearena.dto.admin.VerificationResultDto;
 import az.arena.icearena.entity.Payment;
+import az.arena.icearena.entity.PaymentStatus;
 import az.arena.icearena.entity.Reservation;
 import az.arena.icearena.entity.Session;
 import az.arena.icearena.entity.Skate;
@@ -56,23 +57,9 @@ public class VerificationServiceImpl implements VerificationService {
 
         List<Reservation> reservations = findReservations(code);
         if (!reservations.isEmpty()) {
-            Reservation first = reservations.get(0);
-            User owner = first.getUser();
-            String ticketReview = first.getReviewStatus();
-            String userReview = owner != null ? owner.getIdentityReviewStatus() : null;
-            if ("PENDING_REVIEW".equals(ticketReview) || "PENDING_REVIEW".equals(userReview)) {
-                return reservationBuilder(reservations, normalized)
-                        .valid(false)
-                        .status("IDENTITY_PENDING")
-                        .message("Bilet kassir tərəfindən hələ təsdiqlənməyib. Turniketdən giriş qadağandır.")
-                        .build();
-            }
-            if (owner != null && "REJECTED".equals(owner.getIdentityReviewStatus())) {
-                return reservationBuilder(reservations, normalized)
-                        .valid(false)
-                        .status("IDENTITY_REJECTED")
-                        .message("Müştərinin şəxsiyyət təsdiqi rədd edilib. Hesabından yeni foto yükləməlidir.")
-                        .build();
+            Optional<VerificationResultDto> blocked = checkReservationEligibility(reservations, normalized);
+            if (blocked.isPresent()) {
+                return blocked.get();
             }
             LocalDateTime now = LocalDateTime.now();
 
@@ -101,7 +88,6 @@ public class VerificationServiceImpl implements VerificationService {
             }
 
             for (Reservation reservation : reservations) {
-                reservation.setStatus(Reservation.Status.CONFIRMED);
                 if (reservation.getCashierVerifiedAt() == null) {
                     reservation.setCashierVerifiedAt(now);
                     reservation.setCashierVerifiedBy(username);
@@ -143,23 +129,9 @@ public class VerificationServiceImpl implements VerificationService {
         }
         List<Reservation> reservations = findReservations(code);
         if (!reservations.isEmpty()) {
-            Reservation first = reservations.get(0);
-            User owner = first.getUser();
-            String ticketReview = first.getReviewStatus();
-            String userReview = owner != null ? owner.getIdentityReviewStatus() : null;
-            if ("PENDING_REVIEW".equals(ticketReview) || "PENDING_REVIEW".equals(userReview)) {
-                return reservationBuilder(reservations, normalized)
-                        .valid(false)
-                        .status("IDENTITY_PENDING")
-                        .message("Bilet kassir tərəfindən hələ təsdiqlənməyib. Turniketdən giriş qadağandır.")
-                        .build();
-            }
-            if (owner != null && "REJECTED".equals(owner.getIdentityReviewStatus())) {
-                return reservationBuilder(reservations, normalized)
-                        .valid(false)
-                        .status("IDENTITY_REJECTED")
-                        .message("Müştərinin şəxsiyyət təsdiqi rədd edilib. Hesabından yeni foto yükləməlidir.")
-                        .build();
+            Optional<VerificationResultDto> blocked = checkReservationEligibility(reservations, normalized);
+            if (blocked.isPresent()) {
+                return blocked.get();
             }
             LocalDateTime now = LocalDateTime.now();
 
@@ -196,8 +168,8 @@ public class VerificationServiceImpl implements VerificationService {
             }
 
             // 3. İlk dəfə kassada skan edilir: təsdiqlə və Aktiv biletlər siyahısına sal!
+            // Status dəyişməsi burada yox, yalnız ödəniş təsdiqində baş verir.
             for (Reservation reservation : reservations) {
-                reservation.setStatus(Reservation.Status.CONFIRMED);
                 reservation.setCashierVerifiedAt(now);
                 reservation.setCashierVerifiedBy(username);
                 reservationRepository.save(reservation);
@@ -310,6 +282,11 @@ public class VerificationServiceImpl implements VerificationService {
             return invalid(code, "Bu koda uyğun onlayn bilet tapılmadı.");
         }
 
+        Optional<VerificationResultDto> blocked = checkReservationEligibility(reservations, normalized);
+        if (blocked.isPresent()) {
+            return blocked.get();
+        }
+
         if (reservations.stream().anyMatch(r -> r.getSkateHandedOutAt() != null)) {
             return reservationBuilder(reservations, normalized)
                     .valid(false)
@@ -323,14 +300,6 @@ public class VerificationServiceImpl implements VerificationService {
                     .valid(false)
                     .status("NOT_CHECKED_IN")
                     .message("Əvvəlcə Kassa QR və ya Turniketdə QR kodu skan edib bileti təsdiqləyin.")
-                    .build();
-        }
-
-        if (reservations.stream().anyMatch(r -> r.getStatus() != Reservation.Status.CONFIRMED)) {
-            return reservationBuilder(reservations, normalized)
-                    .valid(false)
-                    .status("PAYMENT_PENDING")
-                    .message("Bilet ödənişlə təsdiqlənmədiyi üçün konki təhvil verilə bilməz.")
                     .build();
         }
 
@@ -421,6 +390,9 @@ public class VerificationServiceImpl implements VerificationService {
         }
         for (Map.Entry<String, List<Reservation>> entry : groups.entrySet()) {
             List<Reservation> group = entry.getValue();
+            if (checkReservationEligibility(group, entry.getKey()).isPresent()) {
+                continue;
+            }
             VerificationResultDto result = reservationBuilder(group, entry.getKey()).build();
             boolean checkedIn = group.stream().anyMatch(r -> r.getCheckedInAt() != null);
             boolean cashierVerified = group.stream().anyMatch(r -> r.getCashierVerifiedAt() != null);
@@ -472,6 +444,68 @@ public class VerificationServiceImpl implements VerificationService {
                 .activeTickets(activeTickets)
                 .onIce(onIce)
                 .build();
+    }
+
+    private Optional<VerificationResultDto> checkReservationEligibility(
+            List<Reservation> reservations, String normalized) {
+        Reservation first = reservations.get(0);
+        User owner = first.getUser();
+        String userReview = owner != null ? owner.getIdentityReviewStatus() : null;
+
+        boolean anyTicketRejected = reservations.stream()
+                .anyMatch(r -> "REJECTED".equals(r.getReviewStatus()));
+        if (anyTicketRejected || "REJECTED".equals(userReview)) {
+            return Optional.of(reservationBuilder(reservations, normalized)
+                    .valid(false)
+                    .status("IDENTITY_REJECTED")
+                    .message("Bilet və ya şəxsiyyət təsdiqi kassir tərəfindən rədd edilib. Giriş qadağandır.")
+                    .build());
+        }
+
+        boolean anyTicketPendingReview = reservations.stream()
+                .anyMatch(r -> "PENDING_REVIEW".equals(r.getReviewStatus()));
+        if (anyTicketPendingReview || "PENDING_REVIEW".equals(userReview)) {
+            return Optional.of(reservationBuilder(reservations, normalized)
+                    .valid(false)
+                    .status("IDENTITY_PENDING")
+                    .message("Bilet kassir tərəfindən hələ təsdiqlənməyib. Turniketdən giriş qadağandır.")
+                    .build());
+        }
+
+        Payment payment = findPaymentForReservations(reservations);
+        if (payment != null && payment.getStatus() == PaymentStatus.REFUNDED) {
+            return Optional.of(reservationBuilder(reservations, normalized)
+                    .valid(false)
+                    .status("CANCELLED")
+                    .message("Bu bilet ləğv edilib və ödənişi geri qaytarılıb (REFUNDED). İstifadə oluna bilməz.")
+                    .build());
+        }
+
+        if (reservations.stream().anyMatch(r -> r.getStatus() == Reservation.Status.CANCELLED)) {
+            return Optional.of(reservationBuilder(reservations, normalized)
+                    .valid(false)
+                    .status("CANCELLED")
+                    .message("Bu bilet ləğv edilib. İstifadə oluna bilməz.")
+                    .build());
+        }
+
+        if (reservations.stream().anyMatch(r -> r.getStatus() != Reservation.Status.CONFIRMED)) {
+            return Optional.of(reservationBuilder(reservations, normalized)
+                    .valid(false)
+                    .status("PAYMENT_PENDING")
+                    .message("Rezervasiya hələ ödənişlə təsdiqlənməyib (PENDING).")
+                    .build());
+        }
+
+        if (payment == null || payment.getStatus() != PaymentStatus.SUCCESS) {
+            return Optional.of(reservationBuilder(reservations, normalized)
+                    .valid(false)
+                    .status("PAYMENT_PENDING")
+                    .message("Biletin ödənişi təsdiqlənməyib. Yalnız ödənişi SUCCESS olan biletlər skan edilə bilər.")
+                    .build());
+        }
+
+        return Optional.empty();
     }
 
     private VerificationResultDto validateReservations(List<Reservation> reservations, String code) {
@@ -610,7 +644,13 @@ public class VerificationServiceImpl implements VerificationService {
                 .skateHandedOutAt(handedOut == null ? null : handedOut.getSkateHandedOutAt())
                 .skateHandedOutBy(handedOut == null ? null : handedOut.getSkateHandedOutBy())
                 .skateStockDeducted(allStockDeducted)
-                .canHandover((allCashierVerified || allCheckedIn) && !anyHandedOut)
+                .canHandover(reservations.stream().allMatch(r -> r.getStatus() == Reservation.Status.CONFIRMED
+                                && !"REJECTED".equals(r.getReviewStatus())
+                                && !"PENDING_REVIEW".equals(r.getReviewStatus()))
+                        && payment != null
+                        && payment.getStatus() == PaymentStatus.SUCCESS
+                        && (allCashierVerified || allCheckedIn)
+                        && !anyHandedOut)
                 .valid(false);
     }
 
