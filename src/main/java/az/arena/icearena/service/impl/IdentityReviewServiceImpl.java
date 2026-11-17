@@ -15,6 +15,7 @@ import az.arena.icearena.repository.SkateRepository;
 import az.arena.icearena.repository.UserRepository;
 import az.arena.icearena.service.IdentityReviewService;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -43,6 +44,12 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
     @Override
     @Transactional(readOnly = true)
     public List<IdentityVerificationAdminDto> list(String status) {
+        return list(status, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<IdentityVerificationAdminDto> list(String status, LocalDate date) {
         String normalized = status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
         boolean isAll = normalized.isEmpty() || "ALL".equals(normalized);
 
@@ -51,7 +58,8 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
                 : userRepository.findByIdentityReviewStatusOrderByIdentityConfirmedAtDesc(normalized);
 
         List<Reservation> ticketReservations = reservationRepository.findAll().stream()
-                .filter(r -> r.getStatus() == Reservation.Status.CONFIRMED)
+                .filter(r -> r.getStatus() == Reservation.Status.CONFIRMED
+                        || "REJECTED".equals(r.getReviewStatus()))
                 .filter(r -> {
                     String effectiveStatus = r.getReviewStatus();
                     if (effectiveStatus == null && hasAnyTicketDocument(r)) {
@@ -81,8 +89,21 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
             result.add(toDto(user));
         }
 
+        // Təsdiq gözləyənlər istisna olmaqla, tarix seçilibsə həmin tarix üzrə süzgəcdən keçir
+        if (date != null && !"PENDING_REVIEW".equals(normalized)) {
+            result = new ArrayList<>(result.stream()
+                    .filter(dto -> matchesDate(dto, date))
+                    .toList());
+        }
+
         result.sort(Comparator.comparing(
                 (IdentityVerificationAdminDto dto) -> {
+                    if (dto.getReviewedAt() != null) {
+                        return dto.getReviewedAt();
+                    }
+                    if (dto.getIdentityReviewedAt() != null) {
+                        return dto.getIdentityReviewedAt();
+                    }
                     if (dto.getTicket() != null && dto.getTicket().getPurchaseDate() != null) {
                         return dto.getTicket().getPurchaseDate();
                     }
@@ -91,6 +112,20 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
                 Comparator.nullsLast(Comparator.reverseOrder())
         ));
         return result;
+    }
+
+    private boolean matchesDate(IdentityVerificationAdminDto dto, LocalDate targetDate) {
+        LocalDateTime primary = dto.getReviewedAt();
+        if (primary == null) {
+            primary = dto.getIdentityReviewedAt();
+        }
+        if (primary == null && dto.getTicket() != null) {
+            primary = dto.getTicket().getPurchaseDate();
+        }
+        if (primary == null) {
+            primary = dto.getIdentityConfirmedAt();
+        }
+        return primary != null && primary.toLocalDate().equals(targetDate);
     }
 
     @Override

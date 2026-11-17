@@ -1,11 +1,14 @@
 package az.arena.icearena.service;
 
 import az.arena.icearena.dto.admin.IdentityVerificationAdminDto;
+import java.time.LocalDate;
 import java.util.List;
 
 public interface IdentityReviewService {
 
     List<IdentityVerificationAdminDto> list(String status);
+
+    List<IdentityVerificationAdminDto> list(String status, LocalDate date);
 
     IdentityVerificationAdminDto approve(Long userId, String reviewerUsername);
 
