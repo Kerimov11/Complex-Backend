@@ -1,8 +1,10 @@
 // File: src/main/java/az/arena/icearena/entity/User.java
 package az.arena.icearena.entity;
 
+import az.arena.icearena.config.SensitiveDataEncryptor;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -64,17 +66,21 @@ public class User {
     @Column
     private LocalDateTime ageVerifiedAt;
 
-    /** Şəxsiyyət vəsiqəsinin seriya və nömrəsi; yalnız müştəri təsdiqi üçün saxlanılır. */
+    /** Şəxsiyyət vəsiqəsinin seriya və nömrəsi (AES-256-GCM ilə bazada şifrələnmiş saxlanılır). */
     @JsonIgnore
     @ToString.Exclude
-    @Column(length = 30)
+    @Convert(converter = SensitiveDataEncryptor.class)
+    @Column(length = 255)
     private String identityDocumentNumber;
 
+    /** FİN kod (AES-256-GCM ilə bazada şifrələnmiş saxlanılır). */
     @JsonIgnore
     @ToString.Exclude
-    @Column(length = 16)
+    @Convert(converter = SensitiveDataEncryptor.class)
+    @Column(length = 255)
     private String finCode;
 
+    /** Vəsiqə fotosunun fayl saxlanışı yolu (məs: file:2026-11-25/identity-xxx.jpg). */
     @JsonIgnore
     @ToString.Exclude
     @Column(columnDefinition = "TEXT")

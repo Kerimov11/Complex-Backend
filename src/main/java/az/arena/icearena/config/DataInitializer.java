@@ -85,6 +85,19 @@ public class DataInitializer {
             } catch (Exception ignored2) {
             }
         }
+        widenColumn("users", "identity_document_number", 255);
+        widenColumn("users", "fin_code", 255);
+    }
+
+    private void widenColumn(String table, String column, int length) {
+        try {
+            jdbcTemplate.execute("ALTER TABLE " + table + " ALTER COLUMN " + column + " TYPE VARCHAR(" + length + ")");
+        } catch (Exception ignored) {
+            try {
+                jdbcTemplate.execute("ALTER TABLE " + table + " ALTER COLUMN " + column + " VARCHAR(" + length + ")");
+            } catch (Exception ignored2) {
+            }
+        }
     }
 
     private void seedRoles() {

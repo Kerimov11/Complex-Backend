@@ -1,5 +1,6 @@
 package az.arena.icearena.controller;
 
+import az.arena.icearena.dto.ReservationResponseDto;
 import az.arena.icearena.entity.Reservation;
 import az.arena.icearena.service.ReservationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,7 +29,7 @@ public class ReservationController {
     /** Köhnə brauzer testləri üçün saxlanılır. */
     @GetMapping("/create")
     @Operation(summary = "Rezervasiya yarat (köhnə GET variantı)")
-    public ResponseEntity<Reservation> createReservation(
+    public ResponseEntity<ReservationResponseDto> createReservation(
             @RequestParam(required = false) Long userId,
             @RequestParam Long sessionId,
             @RequestParam Long skateId,
@@ -40,15 +41,15 @@ public class ReservationController {
             @RequestParam(required = false) Integer participantAge,
             Principal principal,
             Authentication authentication) {
-        return ResponseEntity.ok(create(userId, sessionId, skateId, startTime,
+        return ResponseEntity.ok(ReservationResponseDto.fromEntity(create(userId, sessionId, skateId, startTime,
                 durationMinutes, voucherCode, participantName, participantAge,
-                principal, authentication));
+                principal, authentication)));
     }
 
     /** Frontend üçün əsas yaratma endpoint-i — state dəyişdiyi üçün POST. */
     @PostMapping("/create")
     @Operation(summary = "Rezervasiya yarat + dinamik bilet müddəti yoxlaması")
-    public ResponseEntity<Reservation> createReservationPost(
+    public ResponseEntity<ReservationResponseDto> createReservationPost(
             @RequestParam(required = false) Long userId,
             @RequestParam Long sessionId,
             @RequestParam Long skateId,
@@ -60,38 +61,38 @@ public class ReservationController {
             @RequestParam(required = false) Integer participantAge,
             Principal principal,
             Authentication authentication) {
-        return ResponseEntity.ok(create(userId, sessionId, skateId, startTime,
+        return ResponseEntity.ok(ReservationResponseDto.fromEntity(create(userId, sessionId, skateId, startTime,
                 durationMinutes, voucherCode, participantName, participantAge,
-                principal, authentication));
+                principal, authentication)));
     }
 
     @GetMapping("/{reservationId}")
     @Operation(summary = "Rezervasiya məlumatı")
-    public ResponseEntity<Reservation> getReservation(@PathVariable Long reservationId,
+    public ResponseEntity<ReservationResponseDto> getReservation(@PathVariable Long reservationId,
                                                       Principal principal,
                                                       Authentication authentication) {
-        return ResponseEntity.ok(reservationService.getReservation(
-                reservationId, principal.getName(), isAdmin(authentication)));
+        return ResponseEntity.ok(ReservationResponseDto.fromEntity(reservationService.getReservation(
+                reservationId, principal.getName(), isAdmin(authentication))));
     }
 
     /** Taymeri 10 dəqiqə uzadır — maksimum 2 dəfə. */
     @PostMapping("/{reservationId}/extend")
     @Operation(summary = "Rezervasiya taymerini 10 dəqiqə uzat")
-    public ResponseEntity<Reservation> extendReservation(@PathVariable Long reservationId,
+    public ResponseEntity<ReservationResponseDto> extendReservation(@PathVariable Long reservationId,
                                                          Principal principal,
                                                          Authentication authentication) {
-        return ResponseEntity.ok(reservationService.extendReservation(
-                reservationId, principal.getName(), isAdmin(authentication)));
+        return ResponseEntity.ok(ReservationResponseDto.fromEntity(reservationService.extendReservation(
+                reservationId, principal.getName(), isAdmin(authentication))));
     }
 
     /** Rezervasiyanı ləğv edir və konki stokunu geri qaytarır. */
     @PostMapping("/{reservationId}/cancel")
     @Operation(summary = "Rezervasiyanı ləğv et və stoku qaytar")
-    public ResponseEntity<Reservation> cancelReservation(@PathVariable Long reservationId,
+    public ResponseEntity<ReservationResponseDto> cancelReservation(@PathVariable Long reservationId,
                                                          Principal principal,
                                                          Authentication authentication) {
-        return ResponseEntity.ok(reservationService.cancelReservation(
-                reservationId, principal.getName(), isAdmin(authentication)));
+        return ResponseEntity.ok(ReservationResponseDto.fromEntity(reservationService.cancelReservation(
+                reservationId, principal.getName(), isAdmin(authentication))));
     }
 
     private Reservation create(Long userId,

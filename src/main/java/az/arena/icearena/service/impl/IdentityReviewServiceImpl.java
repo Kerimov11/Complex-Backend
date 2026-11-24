@@ -13,6 +13,7 @@ import az.arena.icearena.repository.ReservationRepository;
 import az.arena.icearena.repository.SessionRepository;
 import az.arena.icearena.repository.SkateRepository;
 import az.arena.icearena.repository.UserRepository;
+import az.arena.icearena.service.DocumentStorageService;
 import az.arena.icearena.service.IdentityReviewService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -40,6 +41,7 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
     private final PaymentRepository paymentRepository;
     private final SessionRepository sessionRepository;
     private final SkateRepository skateRepository;
+    private final DocumentStorageService documentStorageService;
 
     @Override
     @Transactional(readOnly = true)
@@ -374,8 +376,8 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
                 .phoneNumber(user.getPhoneNumber())
                 .dateOfBirth(user.getDateOfBirth())
                 .identityDocumentNumber(user.getIdentityDocumentNumber())
-                .finCode(user.getFinCode())
-                .identityPhotoData(user.getIdentityPhotoData())
+                .finCode(DocumentStorageService.maskFin(user.getFinCode()))
+                .identityPhotoData(documentStorageService.resolvePhotoForReview(user.getIdentityPhotoData()))
                 .identityReviewStatus(user.getIdentityReviewStatus())
                 .identityConfirmedAt(user.getIdentityConfirmedAt())
                 .identityReviewedAt(user.getIdentityReviewedAt())
@@ -405,8 +407,8 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
                         .participantName(r.getParticipantName())
                         .participantAge(r.getParticipantAge())
                         .skateSize(r.getSkate() != null ? r.getSkate().getDisplaySize() : null)
-                        .identityPhotoData(r.getIdentityPhotoData())
-                        .studentCardPhotoData(r.getStudentCardPhotoData())
+                        .identityPhotoData(documentStorageService.resolvePhotoForReview(r.getIdentityPhotoData()))
+                        .studentCardPhotoData(documentStorageService.resolvePhotoForReview(r.getStudentCardPhotoData()))
                         .studentDiscountApplied(Boolean.TRUE.equals(r.getStudentDiscountApplied()))
                         .build())
                 .toList();
@@ -419,12 +421,12 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
                 .skateSizes(sizes)
                 .status(first.getStatus() != null ? first.getStatus().name() : null)
                 .purchaseDate(purchaseDate)
-                .familyIdsPhotoData(first.getFamilyIdsPhotoData())
-                .push30ScreenshotData(first.getPush30ScreenshotData())
+                .familyIdsPhotoData(documentStorageService.resolvePhotoForReview(first.getFamilyIdsPhotoData()))
+                .push30ScreenshotData(documentStorageService.resolvePhotoForReview(first.getPush30ScreenshotData()))
                 .push30Phone(first.getPush30Phone())
-                .qaziDocumentPhotoData(first.getQaziDocumentPhotoData())
+                .qaziDocumentPhotoData(documentStorageService.resolvePhotoForReview(first.getQaziDocumentPhotoData()))
                 .qaziFullName(first.getQaziFullName())
-                .shaheedDocumentPhotoData(first.getShaheedDocumentPhotoData())
+                .shaheedDocumentPhotoData(documentStorageService.resolvePhotoForReview(first.getShaheedDocumentPhotoData()))
                 .participantPhotos(participantPhotos)
                 .build();
     }
@@ -469,7 +471,7 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
                 .phoneNumber(user != null ? user.getPhoneNumber() : null)
                 .dateOfBirth(user != null ? user.getDateOfBirth() : null)
                 .identityDocumentNumber(user != null ? user.getIdentityDocumentNumber() : null)
-                .finCode(user != null ? user.getFinCode() : null)
+                .finCode(user != null ? DocumentStorageService.maskFin(user.getFinCode()) : null)
                 .identityReviewStatus(user != null ? user.getIdentityReviewStatus() : null)
                 .identityConfirmedAt(user != null ? user.getIdentityConfirmedAt() : null)
                 .build();

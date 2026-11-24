@@ -63,9 +63,29 @@ class CustomerVerificationServiceTest {
                 true);
         assertTrue(identityResult.getIdentityConfirmed());
         assertEquals("4567", identityResult.getIdentityDocumentLast4());
+        assertEquals("****123", identityResult.getFinCode());
+
+        User saved = userRepository.findByUsername(user.getUsername()).orElseThrow();
+        assertTrue(saved.getIdentityPhotoData().startsWith("file:"));
 
         assertDoesNotThrow(
                 () -> verificationService.requireTicketPurchaseEligibility(user));
+    }
+
+    @Test
+    void oversizedPhotoAbove2MbIsRejected() {
+        User user = createUser("age-oversized-photo-test");
+        verificationService.saveAge(user.getUsername(), LocalDate.now().minusYears(25));
+
+        // ~2.25 MB binary (> 2 MB limit)
+        String oversizedBase64 = "data:image/jpeg;base64," + "A".repeat(3_000_000);
+        assertThrows(BadRequestException.class,
+                () -> verificationService.saveIdentity(
+                        user.getUsername(),
+                        "AA1234567",
+                        "5ABC123",
+                        oversizedBase64,
+                        true));
     }
 
     @Test

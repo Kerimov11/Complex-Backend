@@ -11,6 +11,7 @@ import az.arena.icearena.exception.ResourceNotFoundException;
 import az.arena.icearena.repository.ReservationRepository;
 import az.arena.icearena.repository.UserRepository;
 import az.arena.icearena.service.CustomerVerificationService;
+import az.arena.icearena.service.DocumentStorageService;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Period;
@@ -42,6 +43,7 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
 
     private final UserRepository userRepository;
     private final ReservationRepository reservationRepository;
+    private final DocumentStorageService documentStorageService;
 
     @Override
     @Transactional(readOnly = true)
@@ -111,19 +113,11 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
                     "FİN kodu 7 simvoldan ibarət olmalıdır (məs: 5ABC123).");
         }
 
-        String cleanedPhoto = identityPhotoData == null ? "" : identityPhotoData.trim();
-        if (!cleanedPhoto.startsWith("data:image/") || cleanedPhoto.length() < 100) {
-            throw new BadRequestException(
-                    "Şəxsiyyət vəsiqəsi ilə foto təsdiqi tələb olunur.");
-        }
-        if (cleanedPhoto.length() > MAX_PHOTO_DATA_LENGTH) {
-            throw new BadRequestException(
-                    "Yüklənən şəkil həddindən artıq böyükdür.");
-        }
+        String storedPhotoPath = documentStorageService.storePhoto(identityPhotoData, "identity");
 
         user.setIdentityDocumentNumber(normalized);
         user.setFinCode(normalizedFin);
-        user.setIdentityPhotoData(cleanedPhoto);
+        user.setIdentityPhotoData(storedPhotoPath);
         user.setIdentityConfirmedAt(LocalDateTime.now());
         user.setIdentityReviewStatus("PENDING_REVIEW");
         user.setIdentityReviewedAt(null);
@@ -150,18 +144,18 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
                 request.getParticipants() == null ? List.of() : request.getParticipants();
         boolean anyPhotoSubmitted = false;
 
-        String familyPhoto = request.getFamilyIdsPhotoData() == null
-                ? "" : request.getFamilyIdsPhotoData().trim();
-        String push30Photo = request.getPush30ScreenshotData() == null
-                ? "" : request.getPush30ScreenshotData().trim();
+        String familyPhotoPath = documentStorageService.storeOptionalPhoto(
+                request.getFamilyIdsPhotoData(), "family");
+        String push30PhotoPath = documentStorageService.storeOptionalPhoto(
+                request.getPush30ScreenshotData(), "push30");
         String push30Phone = request.getPush30Phone() == null || request.getPush30Phone().isBlank()
                 ? "" : normalizeAndValidatePush30Phone(request.getPush30Phone(), true);
-        String qaziPhoto = request.getQaziDocumentPhotoData() == null
-                ? "" : request.getQaziDocumentPhotoData().trim();
+        String qaziPhotoPath = documentStorageService.storeOptionalPhoto(
+                request.getQaziDocumentPhotoData(), "qazi");
         String qaziFullName = request.getQaziFullName() == null
                 ? "" : request.getQaziFullName().trim().replaceAll("\\s+", " ").toUpperCase(Locale.ROOT);
-        String shaheedPhoto = request.getShaheedDocumentPhotoData() == null
-                ? "" : request.getShaheedDocumentPhotoData().trim();
+        String shaheedPhotoPath = documentStorageService.storeOptionalPhoto(
+                request.getShaheedDocumentPhotoData(), "shaheed");
 
         if (!push30Phone.isEmpty()) {
             boolean usedElsewhere = reservationRepository.existsByPush30PhoneAndStatusNot(
@@ -179,26 +173,26 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
                     || !reservation.getUser().getId().equals(user.getId())) {
                 continue;
             }
-            if (familyPhoto.startsWith("data:image/") && familyPhoto.length() <= MAX_PHOTO_DATA_LENGTH) {
-                reservation.setFamilyIdsPhotoData(familyPhoto);
+            if (familyPhotoPath != null) {
+                reservation.setFamilyIdsPhotoData(familyPhotoPath);
                 anyPhotoSubmitted = true;
             }
-            if (push30Photo.startsWith("data:image/") && push30Photo.length() <= MAX_PHOTO_DATA_LENGTH) {
-                reservation.setPush30ScreenshotData(push30Photo);
+            if (push30PhotoPath != null) {
+                reservation.setPush30ScreenshotData(push30PhotoPath);
                 anyPhotoSubmitted = true;
             }
             if (!push30Phone.isEmpty()) {
                 reservation.setPush30Phone(push30Phone);
             }
-            if (qaziPhoto.startsWith("data:image/") && qaziPhoto.length() <= MAX_PHOTO_DATA_LENGTH) {
-                reservation.setQaziDocumentPhotoData(qaziPhoto);
+            if (qaziPhotoPath != null) {
+                reservation.setQaziDocumentPhotoData(qaziPhotoPath);
                 anyPhotoSubmitted = true;
             }
             if (!qaziFullName.isEmpty()) {
                 reservation.setQaziFullName(qaziFullName);
             }
-            if (shaheedPhoto.startsWith("data:image/") && shaheedPhoto.length() <= MAX_PHOTO_DATA_LENGTH) {
-                reservation.setShaheedDocumentPhotoData(shaheedPhoto);
+            if (shaheedPhotoPath != null) {
+                reservation.setShaheedDocumentPhotoData(shaheedPhotoPath);
                 anyPhotoSubmitted = true;
             }
             TicketPhotosRequest.ParticipantPhoto match = items.stream()
@@ -207,22 +201,18 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
                     .findFirst()
                     .orElse(i < items.size() ? items.get(i) : null);
             if (match != null) {
-                if (match.getIdentityPhotoData() != null
-                        && match.getIdentityPhotoData().trim().startsWith("data:image/")) {
-                    String idPhoto = match.getIdentityPhotoData().trim();
-                    if (idPhoto.length() <= MAX_PHOTO_DATA_LENGTH) {
-                        reservation.setIdentityPhotoData(idPhoto);
-                        anyPhotoSubmitted = true;
-                    }
+                String idPhotoPath = documentStorageService.storeOptionalPhoto(
+                        match.getIdentityPhotoData(), "participant-id");
+                if (idPhotoPath != null) {
+                    reservation.setIdentityPhotoData(idPhotoPath);
+                    anyPhotoSubmitted = true;
                 }
-                if (match.getStudentCardPhotoData() != null
-                        && match.getStudentCardPhotoData().trim().startsWith("data:image/")) {
-                    String stPhoto = match.getStudentCardPhotoData().trim();
-                    if (stPhoto.length() <= MAX_PHOTO_DATA_LENGTH) {
-                        reservation.setStudentCardPhotoData(stPhoto);
-                        reservation.setStudentDiscountApplied(true);
-                        anyPhotoSubmitted = true;
-                    }
+                String stPhotoPath = documentStorageService.storeOptionalPhoto(
+                        match.getStudentCardPhotoData(), "student-card");
+                if (stPhotoPath != null) {
+                    reservation.setStudentCardPhotoData(stPhotoPath);
+                    reservation.setStudentDiscountApplied(true);
+                    anyPhotoSubmitted = true;
                 } else if (Boolean.TRUE.equals(match.getStudentDiscountApplied())) {
                     reservation.setStudentDiscountApplied(true);
                 }
@@ -388,7 +378,7 @@ public class CustomerVerificationServiceImpl implements CustomerVerificationServ
                 .identityConfirmed(identityConfirmed)
                 .identityConfirmedAt(user.getIdentityConfirmedAt())
                 .identityDocumentLast4(lastFour(user.getIdentityDocumentNumber()))
-                .finCode(user.getFinCode())
+                .finCode(DocumentStorageService.maskFin(user.getFinCode()))
                 .identityReviewStatus(reviewStatus)
                 .identityRejectionReason(user.getIdentityRejectionReason())
                 .hasIdentityPhoto(user.getIdentityPhotoData() != null && !user.getIdentityPhotoData().isBlank())

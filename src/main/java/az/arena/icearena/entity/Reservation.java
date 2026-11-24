@@ -81,30 +81,36 @@ public class Reservation {
     /** İştirakçının yaşı (onlayn bilet alışında doldurulur). */
     private Integer participantAge;
 
-    /** İştirakçının şəxsiyyət vəsiqəsi ilə foto təsdiqi (base64 data URL). */
+    /** İştirakçının şəxsiyyət vəsiqəsi ilə foto təsdiqi (fayl saxlanışı yolu). */
+    @JsonIgnore
     @Column(columnDefinition = "TEXT")
     private String identityPhotoData;
 
-    /** Tələbə endirimi seçildikdə tələbə kartı ilə foto təsdiqi (base64 data URL). */
+    /** Tələbə endirimi seçildikdə tələbə kartı ilə foto təsdiqi (fayl saxlanışı yolu). */
+    @JsonIgnore
     @Column(columnDefinition = "TEXT")
     private String studentCardPhotoData;
 
     /** Bu iştirakçıya tələbə endirimi tətbiq olunubmu. */
     private Boolean studentDiscountApplied;
 
-    /** Ailə endirimi seçildikdə 3 şəxsiyyət vəsiqəsinin yan-yana fotosu. */
+    /** Ailə endirimi seçildikdə 3 şəxsiyyət vəsiqəsinin yan-yana fotosu (fayl saxlanışı yolu). */
+    @JsonIgnore
     @Column(columnDefinition = "TEXT")
     private String familyIdsPhotoData;
 
-    /** PUSH30 endirimi seçildikdə Premium paket ekran şəkli. */
+    /** PUSH30 endirimi seçildikdə Premium paket ekran şəkli (fayl saxlanışı yolu). */
+    @JsonIgnore
     @Column(columnDefinition = "TEXT")
     private String push30ScreenshotData;
 
     /** PUSH30 endirimi üçün istifadə edilən qeydiyyat telefon nömrəsi (tək səfərlik). */
+    @JsonIgnore
     @Column(length = 32)
     private String push30Phone;
 
-    /** Qazi endirimi üçün qazi sənədinin fotosu. */
+    /** Qazi endirimi üçün qazi sənədinin fotosu (fayl saxlanışı yolu). */
+    @JsonIgnore
     @Column(columnDefinition = "TEXT")
     private String qaziDocumentPhotoData;
 
@@ -112,7 +118,8 @@ public class Reservation {
     @Column(length = 120)
     private String qaziFullName;
 
-    /** Şəhid ailəsi endirimi üçün təsdiqləyici sənəd fotosu. */
+    /** Şəhid ailəsi endirimi üçün təsdiqləyici sənəd fotosu (fayl saxlanışı yolu). */
+    @JsonIgnore
     @Column(columnDefinition = "TEXT")
     private String shaheedDocumentPhotoData;
 
