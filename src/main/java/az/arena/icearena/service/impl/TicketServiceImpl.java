@@ -188,6 +188,10 @@ public class TicketServiceImpl implements TicketService {
             }
         }
 
+        if (reservations.stream().anyMatch(r -> r.getStatus() != Reservation.Status.CONFIRMED)) {
+            throw new BadRequestException("Ləğv edilmiş və ya ödənişi tamamlanmamış bilet üzrə konki təhvil verilə bilməz.");
+        }
+
         if (first.getCheckedInAt() == null) {
             throw new BadRequestException("Bilet turniketdə təsdiqlənməyib. Giriş qeydə alınmadan konki təhvil verilə bilməz.");
         }
@@ -204,15 +208,24 @@ public class TicketServiceImpl implements TicketService {
             throw new BadRequestException("Bu bilet üzrə konkilər artıq anbara təhvil verilib.");
         }
 
-        // Bilet qrupunda neçə konki varsa, hər birini kilidləyərək anbara qaytarırıq (stoku artırırıq)
+        boolean anyDeducted = reservations.stream()
+                .anyMatch(r -> r.getSkateReturnedAt() == null && Boolean.TRUE.equals(r.getSkateStockDeducted()));
+        if (!anyDeducted) {
+            throw new BadRequestException("Bu bilet üzrə stokdan çıxılmış aktiv konki yoxdur.");
+        }
+
+        // Bilet qrupunda yalnız faktiki olaraq stokdan çıxılmış (skateStockDeducted == true) konkiləri anbara qaytarırıq
         for (Reservation reservation : reservations) {
-            if (reservation.getSkateReturnedAt() == null) {
+            if (reservation.getSkateReturnedAt() == null
+                    && Boolean.TRUE.equals(reservation.getSkateStockDeducted())) {
                 if (reservation.getSkate() != null && reservation.getSkate().getId() != null) {
                     Skate skate = skateRepository.findByIdForUpdate(reservation.getSkate().getId())
                             .orElse(reservation.getSkate());
                     int avail = skate.getAvailableQuantity() == null ? 0 : skate.getAvailableQuantity();
                     int total = skate.getTotalQuantity() == null ? 0 : skate.getTotalQuantity();
-                    skate.setAvailableQuantity(Math.min(total, avail + 1));
+                    int damaged = skate.getDamagedQuantity() == null ? 0 : skate.getDamagedQuantity();
+                    int maxAvailable = Math.max(0, total - damaged);
+                    skate.setAvailableQuantity(Math.min(maxAvailable, avail + 1));
                     skateRepository.save(skate);
                 }
                 reservation.setSkateReturnedAt(now);
@@ -364,13 +377,19 @@ public class TicketServiceImpl implements TicketService {
         }
 
         boolean anyReturned = reservations.stream().anyMatch(r -> r.getSkateReturnedAt() != null);
+        boolean anyStockDeducted = reservations.stream()
+                .anyMatch(r -> Boolean.TRUE.equals(r.getSkateStockDeducted()) && r.getSkateReturnedAt() == null);
         LocalDateTime skateReturnedAt = reservations.stream()
                 .map(Reservation::getSkateReturnedAt)
                 .filter(Objects::nonNull)
                 .min(LocalDateTime::compareTo)
                 .orElse(null);
         boolean durationExpired = checkedInAt != null && !now.isBefore(checkedOutAt);
-        boolean canReturnSkates = checkedInAt != null && durationExpired && !anyReturned;
+        boolean canReturnSkates = allConfirmed
+                && checkedInAt != null
+                && durationExpired
+                && !anyReturned
+                && anyStockDeducted;
 
         return TicketDto.builder()
                 .id(first.getId())
@@ -400,7 +419,7 @@ public class TicketServiceImpl implements TicketService {
                 .timerRemainingSeconds(timerExpiresAt == null
                         ? null
                         : Math.max(0, Duration.between(now, timerExpiresAt).getSeconds()))
-                .skateStockDeducted(activeTimer)
+                .skateStockDeducted(anyStockDeducted)
                 .skateHandedOut(anyHandedOut)
                 .checkedInAt(checkedInAt)
                 .checkedOutAt(checkedOutAt)

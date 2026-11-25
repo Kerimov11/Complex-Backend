@@ -175,7 +175,11 @@ public class ReservationService {
             if (id == null) {
                 continue;
             }
-            reservationRepository.findById(id).ifPresent(this::cancelReservationInternal);
+            reservationRepository.findById(id).ifPresent(r -> {
+                if (r.getCheckedInAt() == null && r.getSkateHandedOutAt() == null) {
+                    cancelReservationInternal(r);
+                }
+            });
         }
     }
 
@@ -205,19 +209,34 @@ public class ReservationService {
     }
 
     private Reservation cancelReservationInternal(Reservation reservation) {
+        if (reservation.getCheckedInAt() != null || reservation.getSkateHandedOutAt() != null) {
+            throw new BadRequestException(
+                    "Konkisi təhvil verilmiş və ya turniketdə istifadə olunmuş rezervasiya ləğv edilə bilməz.");
+        }
+        if (reservation.getStatus() == Reservation.Status.CANCELLED) {
+            return reservation;
+        }
         if (reservation.getStatus() == Reservation.Status.PENDING
                 || reservation.getStatus() == Reservation.Status.CONFIRMED) {
-            if (Boolean.TRUE.equals(reservation.getSkateStockDeducted())) {
+            if (Boolean.TRUE.equals(reservation.getSkateStockDeducted())
+                    && reservation.getSkateHandedOutAt() == null
+                    && reservation.getSkateReturnedAt() == null) {
                 Skate ref = reservation.getSkate();
                 if (ref != null && ref.getId() != null) {
                     Skate skate = skateRepository.findByIdForUpdate(ref.getId()).orElse(ref);
                     int total = skate.getTotalQuantity() == null
                             ? Integer.MAX_VALUE
                             : skate.getTotalQuantity();
+                    int damaged = skate.getDamagedQuantity() == null
+                            ? 0
+                            : skate.getDamagedQuantity();
+                    int maxAvailable = total == Integer.MAX_VALUE
+                            ? Integer.MAX_VALUE
+                            : Math.max(0, total - damaged);
                     int available = skate.getAvailableQuantity() == null
                             ? 0
                             : skate.getAvailableQuantity();
-                    skate.setAvailableQuantity(Math.min(total, available + 1));
+                    skate.setAvailableQuantity(Math.min(maxAvailable, available + 1));
                     skateRepository.save(skate);
                 }
             }

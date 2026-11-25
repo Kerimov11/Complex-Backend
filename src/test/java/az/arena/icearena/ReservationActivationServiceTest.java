@@ -16,6 +16,8 @@ import az.arena.icearena.repository.SessionRepository;
 import az.arena.icearena.repository.SkateRepository;
 import az.arena.icearena.repository.UserRepository;
 import az.arena.icearena.service.ReservationActivationService;
+import az.arena.icearena.service.ReservationService;
+import az.arena.icearena.service.TicketService;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -31,6 +33,10 @@ class ReservationActivationServiceTest {
 
     @Autowired
     private ReservationActivationService activationService;
+    @Autowired
+    private ReservationService reservationService;
+    @Autowired
+    private TicketService ticketService;
     @Autowired
     private ReservationRepository reservationRepository;
     @Autowired
@@ -108,6 +114,65 @@ class ReservationActivationServiceTest {
         assertEquals(10, skateRepository.findById(skate.getId()).orElseThrow()
                 .getAvailableQuantity());
         assertFalse(group.get(0).getSkateStockDeducted());
+    }
+
+    @Test
+    void cancelAfterHandoutAndReturnWithoutDeductionCannotInflateStock() {
+        User user = userRepository.save(User.builder()
+                .username("stock-inflation-test-user")
+                .email("stock-inflation-test-user@icearena.az")
+                .password("x")
+                .firstName("Stock")
+                .lastName("Guard")
+                .build());
+        Session session = sessionRepository.save(Session.builder()
+                .sessionDate(LocalDate.now().plusDays(1))
+                .startTime(LocalTime.of(10, 0))
+                .endTime(LocalTime.of(23, 0))
+                .maxTicketLimit(100)
+                .availableTickets(100)
+                .blocked(false)
+                .build());
+        Skate skate = skateRepository.save(Skate.builder()
+                .size(991)
+                .totalQuantity(10)
+                .availableQuantity(5)
+                .damagedQuantity(0)
+                .build());
+
+        // 1. Konki təhvil verilib (availableQuantity = 5, 1 ədəd müştəridədir)
+        String voucher = "STOCK-GUARD-VOUCHER";
+        Reservation res = reservation(user, session, skate, voucher);
+        res.setSkateStockDeducted(true);
+        res.setSkateHandedOutAt(LocalDateTime.now().minusMinutes(70));
+        res.setCheckedInAt(LocalDateTime.now().minusMinutes(65));
+        res = reservationRepository.save(res);
+        final Long resId = res.getId();
+
+        // Konki götürülmüş rezervasiya /cancel ilə ləğv edilə və stoku artıra bilməz
+        assertThrows(BadRequestException.class,
+                () -> reservationService.cancelReservation(resId, user.getUsername(), false));
+        assertEquals(5, skateRepository.findById(skate.getId()).orElseThrow().getAvailableQuantity());
+
+        // Seans bitdikdən sonra returnSkates stoku yalnız 1 dəfə artırır (5 -> 6)
+        ticketService.returnSkates(voucher, user.getUsername());
+        assertEquals(6, skateRepository.findById(skate.getId()).orElseThrow().getAvailableQuantity());
+
+        // İkinci dəfə returnSkates çağırılsa rədd edilir və stok dəyişmir (6 qalır)
+        assertThrows(BadRequestException.class,
+                () -> ticketService.returnSkates(voucher, user.getUsername()));
+        assertEquals(6, skateRepository.findById(skate.getId()).orElseThrow().getAvailableQuantity());
+
+        // 2. Stokdan konki çıxılmamış (skateStockDeducted = false) bilet returnSkates ilə stoku şişirdə bilməz
+        String noSkateVoucher = "NO-SKATE-DEDUCTED-VOUCHER";
+        Reservation noSkateRes = reservation(user, session, skate, noSkateVoucher);
+        noSkateRes.setSkateStockDeducted(false);
+        noSkateRes.setCheckedInAt(LocalDateTime.now().minusMinutes(65));
+        reservationRepository.save(noSkateRes);
+
+        assertThrows(BadRequestException.class,
+                () -> ticketService.returnSkates(noSkateVoucher, user.getUsername()));
+        assertEquals(6, skateRepository.findById(skate.getId()).orElseThrow().getAvailableQuantity());
     }
 
     private Reservation reservation(User user, Session session, Skate skate, String voucher) {
