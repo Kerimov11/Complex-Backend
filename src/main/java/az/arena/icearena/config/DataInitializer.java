@@ -87,6 +87,15 @@ public class DataInitializer {
         }
         widenColumn("users", "identity_document_number", 255);
         widenColumn("users", "fin_code", 255);
+        initVersionColumn("skates");
+        initVersionColumn("sessions");
+    }
+
+    private void initVersionColumn(String table) {
+        try {
+            jdbcTemplate.execute("UPDATE " + table + " SET version = 0 WHERE version IS NULL");
+        } catch (Exception ignored) {
+        }
     }
 
     private void widenColumn(String table, String column, int length) {

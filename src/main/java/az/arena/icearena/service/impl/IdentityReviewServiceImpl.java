@@ -186,16 +186,20 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
                 reservation.setStatus(Reservation.Status.CANCELLED);
                 if (Boolean.TRUE.equals(reservation.getSkateStockDeducted())
                         && reservation.getSkateHandedOutAt() == null
-                        && reservation.getSkate() != null) {
-                    Skate skate = reservation.getSkate();
+                        && reservation.getSkate() != null
+                        && reservation.getSkate().getId() != null) {
+                    Skate skate = skateRepository.findByIdForUpdate(reservation.getSkate().getId())
+                            .orElse(reservation.getSkate());
+                    int total = skate.getTotalQuantity() == null ? Integer.MAX_VALUE : skate.getTotalQuantity();
                     int avail = skate.getAvailableQuantity() == null ? 0 : skate.getAvailableQuantity();
-                    skate.setAvailableQuantity(avail + 1);
+                    skate.setAvailableQuantity(Math.min(total, avail + 1));
                     skateRepository.save(skate);
                     reservation.setSkateStockDeducted(false);
                     reservation.setTimerExpiresAt(null);
                 }
-                if (reservation.getSession() != null) {
-                    Session session = reservation.getSession();
+                if (reservation.getSession() != null && reservation.getSession().getId() != null) {
+                    Session session = sessionRepository.findByIdForUpdate(reservation.getSession().getId())
+                            .orElse(reservation.getSession());
                     int max = session.getMaxTicketLimit() == null ? Integer.MAX_VALUE : session.getMaxTicketLimit();
                     int avail = session.getAvailableTickets() == null ? 0 : session.getAvailableTickets();
                     session.setAvailableTickets(Math.min(max, avail + 1));
@@ -282,16 +286,20 @@ public class IdentityReviewServiceImpl implements IdentityReviewService {
             reservation.setStatus(Reservation.Status.CANCELLED);
             if (Boolean.TRUE.equals(reservation.getSkateStockDeducted())
                     && reservation.getSkateHandedOutAt() == null
-                    && reservation.getSkate() != null) {
-                Skate skate = reservation.getSkate();
+                    && reservation.getSkate() != null
+                    && reservation.getSkate().getId() != null) {
+                Skate skate = skateRepository.findByIdForUpdate(reservation.getSkate().getId())
+                        .orElse(reservation.getSkate());
+                int total = skate.getTotalQuantity() == null ? Integer.MAX_VALUE : skate.getTotalQuantity();
                 int avail = skate.getAvailableQuantity() == null ? 0 : skate.getAvailableQuantity();
-                skate.setAvailableQuantity(avail + 1);
+                skate.setAvailableQuantity(Math.min(total, avail + 1));
                 skateRepository.save(skate);
                 reservation.setSkateStockDeducted(false);
                 reservation.setTimerExpiresAt(null);
             }
-            if (reservation.getSession() != null) {
-                Session session = reservation.getSession();
+            if (reservation.getSession() != null && reservation.getSession().getId() != null) {
+                Session session = sessionRepository.findByIdForUpdate(reservation.getSession().getId())
+                        .orElse(reservation.getSession());
                 int max = session.getMaxTicketLimit() == null ? Integer.MAX_VALUE : session.getMaxTicketLimit();
                 int avail = session.getAvailableTickets() == null ? 0 : session.getAvailableTickets();
                 session.setAvailableTickets(Math.min(max, avail + 1));

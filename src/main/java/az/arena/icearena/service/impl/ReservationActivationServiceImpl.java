@@ -132,18 +132,22 @@ public class ReservationActivationServiceImpl implements ReservationActivationSe
         }
 
         Map<Long, Integer> requiredBySkate = new LinkedHashMap<>();
-        Map<Long, Skate> skateById = new LinkedHashMap<>();
         for (Reservation reservation : reservations) {
             Skate skate = reservation.getSkate();
             if (skate == null || skate.getId() == null) {
                 throw new BadRequestException("Rezervasiyada konki ölçüsü göstərilməyib.");
             }
-            skateById.put(skate.getId(), skate);
             requiredBySkate.merge(skate.getId(), 1, Integer::sum);
         }
 
-        for (Map.Entry<Long, Integer> entry : requiredBySkate.entrySet()) {
-            Skate skate = skateById.get(entry.getKey());
+        List<Map.Entry<Long, Integer>> lockedInOrder = requiredBySkate.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .toList();
+        Map<Long, Skate> lockedSkates = new LinkedHashMap<>();
+        for (Map.Entry<Long, Integer> entry : lockedInOrder) {
+            Skate skate = skateRepository.findByIdForUpdate(entry.getKey())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Konki tapılmadı: " + entry.getKey()));
             int required = entry.getValue();
             int available = skate.getAvailableQuantity() == null ? 0 : skate.getAvailableQuantity();
             if (available < required) {
@@ -152,11 +156,13 @@ public class ReservationActivationServiceImpl implements ReservationActivationSe
                                 + skate.getDisplaySize() + ", tələb " + required
                                 + ", mövcud " + available + ").");
             }
+            lockedSkates.put(entry.getKey(), skate);
         }
 
-        for (Map.Entry<Long, Integer> entry : requiredBySkate.entrySet()) {
-            Skate skate = skateById.get(entry.getKey());
-            skate.setAvailableQuantity(skate.getAvailableQuantity() - entry.getValue());
+        for (Map.Entry<Long, Integer> entry : lockedInOrder) {
+            Skate skate = lockedSkates.get(entry.getKey());
+            int available = skate.getAvailableQuantity() == null ? 0 : skate.getAvailableQuantity();
+            skate.setAvailableQuantity(available - entry.getValue());
             skateRepository.save(skate);
         }
 
@@ -199,10 +205,11 @@ public class ReservationActivationServiceImpl implements ReservationActivationSe
     }
 
     private void restoreSkate(Reservation reservation) {
-        Skate skate = reservation.getSkate();
-        if (skate == null) {
+        Skate ref = reservation.getSkate();
+        if (ref == null || ref.getId() == null) {
             return;
         }
+        Skate skate = skateRepository.findByIdForUpdate(ref.getId()).orElse(ref);
         int total = skate.getTotalQuantity() == null ? Integer.MAX_VALUE : skate.getTotalQuantity();
         int available = skate.getAvailableQuantity() == null ? 0 : skate.getAvailableQuantity();
         skate.setAvailableQuantity(Math.min(total, available + 1));

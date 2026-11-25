@@ -8,6 +8,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.HashSet;
@@ -54,6 +55,11 @@ public class Session {
 
     @Column(length = 250)
     private String blockReason;
+
+    @Version
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "BIGINT DEFAULT 0")
+    private Long version = 0L;
 
     @Builder.Default
     @OneToMany(mappedBy = "session")

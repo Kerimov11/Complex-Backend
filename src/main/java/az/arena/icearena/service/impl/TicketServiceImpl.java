@@ -204,11 +204,12 @@ public class TicketServiceImpl implements TicketService {
             throw new BadRequestException("Bu bilet üzrə konkilər artıq anbara təhvil verilib.");
         }
 
-        // Bilet qrupunda neçə konki varsa, hər birini anbara qaytarırıq (stoku artırırıq)
+        // Bilet qrupunda neçə konki varsa, hər birini kilidləyərək anbara qaytarırıq (stoku artırırıq)
         for (Reservation reservation : reservations) {
             if (reservation.getSkateReturnedAt() == null) {
-                if (reservation.getSkate() != null) {
-                    Skate skate = reservation.getSkate();
+                if (reservation.getSkate() != null && reservation.getSkate().getId() != null) {
+                    Skate skate = skateRepository.findByIdForUpdate(reservation.getSkate().getId())
+                            .orElse(reservation.getSkate());
                     int avail = skate.getAvailableQuantity() == null ? 0 : skate.getAvailableQuantity();
                     int total = skate.getTotalQuantity() == null ? 0 : skate.getTotalQuantity();
                     skate.setAvailableQuantity(Math.min(total, avail + 1));

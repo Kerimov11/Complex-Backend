@@ -36,6 +36,11 @@ public class Skate {
     @Column(length = 20)
     private String label;
 
+    @Version
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "BIGINT DEFAULT 0")
+    private Long version = 0L;
+
     /** UI-da göstərilən ölçü: aralıq varsa "26-32", yoxdursa "38". */
     public String getDisplaySize() {
         if (label != null && !label.isBlank()) {

@@ -82,18 +82,23 @@ public class ReservationService {
         if (username != null && !admin) {
             customerVerificationService.requireTicketPurchaseEligibility(user);
         }
-        Session session = sessionRepository.findById(sessionId)
+        Session session = sessionRepository.findByIdForUpdate(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Seans tapılmadı: " + sessionId));
         Skate skate = skateRepository.findById(skateId)
                 .orElseThrow(() -> new ResourceNotFoundException("Konki tapılmadı: " + skateId));
+
+        if (Boolean.TRUE.equals(session.getBlocked())) {
+            throw new BadRequestException("Bu seans hazırda bloklanıb.");
+        }
+        if (session.getAvailableTickets() != null && session.getAvailableTickets() <= 0) {
+            throw new BadRequestException("Bu seans üçün boş bilet yeri qalmayıb.");
+        }
 
         LocalDateTime now = LocalDateTime.now();
         LocalTime effectiveEntry = resolveEntryTime(session, entryTime, now);
         int duration = normalizeDuration(durationMinutes);
 
-        // Onlayn biletlər sərbəst vaxtlı və limitsiz etibarlıdır; cari sessiyanın bağlanması və ya qalıq vaxt
-        // onlayn bilet alışını bloklamır (müştəri QR skan edildikdən sonra istədiyi vaxt buzda sürüşə bilər).
-        if (session.getAvailableTickets() != null && session.getAvailableTickets() > 0) {
+        if (session.getAvailableTickets() != null) {
             session.setAvailableTickets(session.getAvailableTickets() - 1);
             sessionRepository.save(session);
         }
@@ -203,8 +208,9 @@ public class ReservationService {
         if (reservation.getStatus() == Reservation.Status.PENDING
                 || reservation.getStatus() == Reservation.Status.CONFIRMED) {
             if (Boolean.TRUE.equals(reservation.getSkateStockDeducted())) {
-                Skate skate = reservation.getSkate();
-                if (skate != null) {
+                Skate ref = reservation.getSkate();
+                if (ref != null && ref.getId() != null) {
+                    Skate skate = skateRepository.findByIdForUpdate(ref.getId()).orElse(ref);
                     int total = skate.getTotalQuantity() == null
                             ? Integer.MAX_VALUE
                             : skate.getTotalQuantity();
@@ -216,8 +222,9 @@ public class ReservationService {
                 }
             }
 
-            Session session = reservation.getSession();
-            if (session != null) {
+            Session sessionRef = reservation.getSession();
+            if (sessionRef != null && sessionRef.getId() != null) {
+                Session session = sessionRepository.findByIdForUpdate(sessionRef.getId()).orElse(sessionRef);
                 int max = session.getMaxTicketLimit() == null
                         ? Integer.MAX_VALUE
                         : session.getMaxTicketLimit();
